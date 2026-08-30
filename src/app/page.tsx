@@ -38,7 +38,7 @@ export default function Home() {
   const [selectedPass, setSelectedPass] = useState<PassTier | null>(null);
   const [checkoutSession, setCheckoutSession] = useState(0);
 
-  // Hold the page still behind the loading sequence.
+  // Hold the page still while the door stamp lifts.
   useEffect(() => {
     if (ready) return;
     const previous = document.body.style.overflow;

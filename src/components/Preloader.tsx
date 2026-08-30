@@ -5,12 +5,10 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { EVENT } from "@/lib/event";
 
-const BOOT_LINES = [
-  "WARMING UP THE RIG",
-  "POINTING THE LASERS",
-  "STOCKING THE MOCKTAIL BAR",
-  "UNLOCKING THE DOOR",
-];
+const EASE = [0.76, 0, 0.24, 1] as const;
+const PAPER = "#efe6d2";
+const INK = "#1a140c";
+const VOID = "#030307";
 
 type PreloaderProps = {
   onComplete: () => void;
@@ -18,146 +16,187 @@ type PreloaderProps = {
 
 export function Preloader({ onComplete }: PreloaderProps) {
   const reduced = useReducedMotion();
-  const [progress, setProgress] = useState(0);
-  const [exiting, setExiting] = useState(false);
-  const completed = useRef(false);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [open, setOpen] = useState(false);
+  const finished = useRef(false);
+
+  useEffect(() => {
+    const measure = () =>
+      setSize({ w: window.innerWidth, h: window.innerHeight });
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
 
   useEffect(() => {
     if (reduced) {
-      const timeout = window.setTimeout(onComplete, 250);
+      const timeout = window.setTimeout(() => {
+        if (finished.current) return;
+        finished.current = true;
+        onComplete();
+      }, 80);
       return () => window.clearTimeout(timeout);
     }
 
-    const duration = 2400;
-    const start = performance.now();
-    let frame = 0;
-
-    const tick = (now: number) => {
-      const elapsed = now - start;
-      const linear = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - linear, 3);
-      // A small stall near the end so it reads as a projector, not a spinner.
-      const stutter = linear > 0.83 && linear < 0.92 ? -0.028 : 0;
-      setProgress(Math.min(100, Math.max(0, (eased + stutter) * 100)));
-
-      if (linear < 1) {
-        frame = requestAnimationFrame(tick);
-      } else if (!completed.current) {
-        completed.current = true;
-        setExiting(true);
-        window.setTimeout(onComplete, 1100);
-      }
+    // Stamp lands, then the paper lifts. Keep it under a beat and a half.
+    const lift = window.setTimeout(() => setOpen(true), 720);
+    const done = window.setTimeout(() => {
+      if (finished.current) return;
+      finished.current = true;
+      onComplete();
+    }, 1580);
+    return () => {
+      window.clearTimeout(lift);
+      window.clearTimeout(done);
     };
-
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
   }, [onComplete, reduced]);
 
-  const displayProgress = reduced ? 100 : progress;
-  const isExiting = reduced || exiting;
-  const rounded = Math.round(displayProgress);
-  const activeLine = Math.min(
-    BOOT_LINES.length - 1,
-    Math.floor((rounded / 100) * BOOT_LINES.length),
-  );
+  const lifting = reduced || open;
+  const bulge = Math.min(240, Math.max(140, size.h * 0.2));
+  const paperPath =
+    size.w > 0
+      ? `M0 0 L${size.w} 0 L${size.w} ${size.h} Q${size.w / 2} ${size.h + bulge} 0 ${size.h} Z`
+      : "";
+  const flatPath =
+    size.w > 0
+      ? `M0 0 L${size.w} 0 L${size.w} ${size.h} Q${size.w / 2} ${size.h} 0 ${size.h} Z`
+      : "";
 
   return (
     <motion.div
-      className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden"
-      initial={{ opacity: 1 }}
-      exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.5 } }}
+      className="fixed inset-0 z-100 overflow-visible"
+      style={{ backgroundColor: PAPER, color: INK }}
+      initial={{ y: 0 }}
+      animate={lifting ? { y: "-108%" } : { y: 0 }}
+      transition={{
+        duration: reduced ? 0.01 : 0.78,
+        ease: EASE,
+        delay: reduced ? 0 : 0.02,
+      }}
+      aria-hidden={lifting}
     >
-      <div className="absolute inset-0 bg-[#020206]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(96,105,240,0.16),transparent_58%)]" />
-      <div className="noise-overlay absolute inset-0 opacity-[0.14] mix-blend-soft-light" />
-
-      <motion.div
-        className="absolute top-0 left-0 h-[38%] w-full bg-[linear-gradient(to_bottom,transparent,rgba(154,164,255,0.07),transparent)]"
-        animate={{ y: ["-40%", "260%"] }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: "linear" }}
-      />
-
-      {/* Shutters part to hand the screen over to the hero. */}
-      <motion.div
-        className="absolute inset-x-0 top-0 z-20 h-1/2 origin-top border-b border-electric-400/25 bg-[#020206]"
-        initial={{ y: 0 }}
-        animate={isExiting ? { y: "-100%" } : { y: 0 }}
-        transition={{ duration: 1, ease: [0.76, 0, 0.24, 1], delay: 0.15 }}
-      />
-      <motion.div
-        className="absolute inset-x-0 bottom-0 z-20 h-1/2 origin-bottom border-t border-electric-400/25 bg-[#020206]"
-        initial={{ y: 0 }}
-        animate={isExiting ? { y: "100%" } : { y: 0 }}
-        transition={{ duration: 1, ease: [0.76, 0, 0.24, 1], delay: 0.15 }}
-      />
-
-      <motion.div
-        className="relative z-30 flex w-full max-w-xl flex-col items-center gap-8 px-6 text-center"
-        animate={
-          isExiting
-            ? { opacity: 0, scale: 1.28, filter: "blur(14px)" }
-            : { opacity: 1, scale: 1 }
-        }
-        transition={{ duration: 0.7, ease: [0.76, 0, 0.24, 1] }}
-      >
-        <motion.p
-          className="font-mono text-[10px] tracking-[0.5em] text-electric-200/70 uppercase"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
+      {size.w > 0 && (
+        <svg
+          className="pointer-events-none absolute top-0 left-0 z-0 h-[calc(100%+260px)] w-full"
+          aria-hidden
         >
-          {EVENT.host}
-        </motion.p>
+          <motion.path
+            fill={PAPER}
+            initial={{ d: paperPath }}
+            animate={{ d: lifting ? flatPath : paperPath }}
+            transition={{ duration: 0.7, ease: EASE }}
+          />
+        </svg>
+      )}
 
-        <h1 className="font-display glow-text text-6xl leading-none font-light tracking-[0.02em] text-bone uppercase sm:text-8xl">
-          {Array.from(EVENT.name).map((letter, i) => (
-            <motion.span
-              key={`${letter}-${i}`}
-              className="inline-block"
-              initial={{ opacity: 0, y: 36, filter: "blur(8px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              transition={{
-                duration: 0.9,
-                delay: 0.1 + i * 0.07,
-                ease: [0.16, 1, 0.3, 1],
-              }}
-            >
-              {letter}
-            </motion.span>
-          ))}
-        </h1>
+      <div
+        className="pointer-events-none absolute inset-0 z-10 opacity-[0.18] mix-blend-multiply"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E\")",
+        }}
+      />
 
-        <div className="w-full">
-          <div className="mb-3 flex items-baseline justify-between font-mono text-[10px] tracking-[0.26em] text-bone/45 uppercase">
-            <motion.span
-              key={activeLine}
-              initial={{ opacity: 0, x: -6 }}
-              animate={{ opacity: 1, x: 0 }}
-            >
-              {BOOT_LINES[activeLine]}
-            </motion.span>
-            <span className="text-electric-200 tabular-nums">
-              {String(rounded).padStart(3, "0")}%
+      {/* Ticket punch-holes down the left edge. */}
+      <div className="absolute top-0 bottom-0 left-0 z-20 flex w-7 flex-col justify-between py-8 sm:w-9">
+        {Array.from({ length: 14 }).map((_, i) => (
+          <span
+            key={i}
+            className="mx-auto block size-2.5 rounded-full sm:size-3"
+            style={{ backgroundColor: VOID, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)" }}
+          />
+        ))}
+      </div>
+
+      <div className="relative z-20 flex h-full flex-col justify-between px-10 py-8 sm:px-14 sm:py-10">
+        <div className="flex items-start justify-between gap-4 font-sans text-[11px] tracking-[0.18em] uppercase">
+          <p>{EVENT.host}</p>
+          <p className="text-right">
+            {EVENT.shortDateLabel}
+            <span className="mt-1 block tracking-[0.14em] normal-case opacity-70">
+              {EVENT.timeLabel.replace("—", "–")}
             </span>
-          </div>
-
-          <div className="relative h-[2px] w-full overflow-hidden rounded-full bg-white/8">
-            <motion.div
-              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-electric-500 via-electric-300 to-bone"
-              style={{ width: `${displayProgress}%` }}
-            />
-            <motion.div
-              className="absolute inset-y-0 w-16 bg-white/40 blur-md"
-              style={{ left: `calc(${displayProgress}% - 32px)` }}
-            />
-          </div>
-
-          <div className="mt-4 flex justify-between font-mono text-[9px] tracking-[0.26em] text-bone/25 uppercase">
-            <span>{EVENT.shortDateLabel}</span>
-            <span>{EVENT.venueCity}</span>
-          </div>
+          </p>
         </div>
-      </motion.div>
+
+        <div className="flex flex-1 items-center justify-center">
+          <motion.div
+            className="relative"
+            initial={{ opacity: 0, scale: 1.55, rotate: -11, y: 18 }}
+            animate={{ opacity: 1, scale: 1, rotate: -2.4, y: 0 }}
+            transition={{
+              duration: 0.42,
+              ease: [0.16, 1, 0.3, 1],
+              delay: 0.06,
+            }}
+          >
+            <StampMark />
+          </motion.div>
+        </div>
+
+        <div className="flex items-end justify-between gap-4">
+          <p className="max-w-[14rem] font-display text-2xl leading-none italic sm:text-3xl">
+            {EVENT.venueName}
+          </p>
+          <p className="text-right font-sans text-[11px] tracking-[0.16em] uppercase">
+            {EVENT.venueCity}
+            <span className="mt-1 block opacity-70">Doors at 12</span>
+          </p>
+        </div>
+      </div>
     </motion.div>
+  );
+}
+
+function StampMark() {
+  return (
+    <div
+      className="relative grid size-[min(72vw,280px)] place-items-center"
+      style={{ color: "#3a2158" }}
+    >
+      <svg viewBox="0 0 280 280" className="absolute inset-0 h-full w-full" aria-hidden>
+        <circle
+          cx="140"
+          cy="140"
+          r="132"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3.5"
+          opacity="0.92"
+        />
+        <circle
+          cx="140"
+          cy="140"
+          r="118"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeDasharray="2.5 5.5"
+          opacity="0.75"
+        />
+        <path
+          id="utopia-stamp-rim"
+          d="M140,140 m-100,0 a100,100 0 1,1 200,0 a100,100 0 1,1 -200,0"
+          fill="none"
+        />
+        <text
+          fill="currentColor"
+          fontSize="11"
+          letterSpacing="4.2"
+          className="uppercase"
+          style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif" }}
+        >
+          <textPath href="#utopia-stamp-rim" startOffset="18%">
+            HYDERABAD · OUZO · SUN 27 SEP ·
+          </textPath>
+        </text>
+      </svg>
+
+      <div className="relative text-center" style={{ mixBlendMode: "multiply" }}>
+        <p className="font-display text-[clamp(2.6rem,8vw,4.4rem)] leading-[0.82] font-medium tracking-[-0.03em]">
+          {EVENT.name}
+        </p>
+      </div>
+    </div>
   );
 }
