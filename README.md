@@ -18,7 +18,7 @@ Two passes: **Early Bird ₹1,249** and **VIP ₹1,549**.
 | Animation   | Framer Motion                                                 |
 | Icons       | Lucide React (brand marks hand-drawn in `ui/SocialIcons.tsx`)  |
 | Validation  | Zod, shared between the browser and the API routes            |
-| Email       | Resend HTTP API or any SMTP server via Nodemailer             |
+| Email       | Gmail SMTP (App Password), or SMTP / Resend as fallback       |
 | Type        | Bodoni Moda (display), Space Grotesk (UI), JetBrains Mono      |
 
 ## Run it
@@ -55,9 +55,10 @@ Copy `.env.example` to `.env.local`. Everything is optional in development;
 | Variable | Purpose |
 | --- | --- |
 | `AUTH_SECRET` | Signs tokens, hashes OTPs and 12-word phrases, derives pass codes |
-| `RESEND_API_KEY` | Send mail through Resend |
-| `SMTP_URL` | Send mail through any SMTP server instead |
-| `MAIL_FROM` / `MAIL_REPLY_TO` | Sender identity |
+| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | Live mail via Gmail SMTP (no custom domain) |
+| `SMTP_URL` | Optional generic SMTP if you are not using Gmail |
+| `RESEND_API_KEY` | Optional Resend fallback (needs a verified domain for guests) |
+| `MAIL_FROM` / `MAIL_REPLY_TO` | Optional sender overrides (defaults to `GMAIL_USER`) |
 | `NEXT_PUBLIC_SITE_URL` | Absolute URL for Open Graph and pass QR links |
 | `UPI_VPA` / `UPI_PAYEE_NAME` | Collect-request UPI ID shown in checkout |
 | `CMS_PHRASE` / `DOOR_PHRASE` | 12 BIP39 English words (hashed in memory, never logged) |

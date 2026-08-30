@@ -5,24 +5,73 @@ import { passQrPayload, qrPngBuffer, qrDataUrl } from "./pass-code";
 import type { Order } from "./store";
 
 /**
- * Three transports, picked by whichever env vars exist:
- *   RESEND_API_KEY  → Resend HTTP API (no SMTP egress needed)
- *   SMTP_URL        → any SMTP server via nodemailer
- *   neither         → dev mode: log to the server console
- *
- * Dev mode also returns the code to the client so the flow is testable with no
- * credentials. That only ever happens outside production.
+ * Transports, first match wins:
+ *   GMAIL_USER + GMAIL_APP_PASSWORD → Gmail SMTP (the live default)
+ *   SMTP_URL                        → any SMTP server via nodemailer
+ *   RESEND_API_KEY                  → Resend HTTP API
+ *   none of the above               → console (dev only; codes also return to the client)
  */
 
 export type SendResult = { delivered: boolean; transport: string };
 
 type Attachment = { filename: string; content: Buffer; contentType?: string };
 
-const FROM = process.env.MAIL_FROM ?? `UTOPIA <onboarding@resend.dev>`;
-const REPLY_TO = process.env.MAIL_REPLY_TO ?? EVENT.email;
+function gmailUser() {
+  return process.env.GMAIL_USER?.trim() ?? "";
+}
+
+function gmailAppPassword() {
+  return (process.env.GMAIL_APP_PASSWORD ?? "").replace(/\s+/g, "");
+}
+
+function hasGmail() {
+  return Boolean(gmailUser() && gmailAppPassword());
+}
+
+function mailFrom() {
+  if (process.env.MAIL_FROM?.trim()) return process.env.MAIL_FROM.trim();
+  const user = gmailUser();
+  if (user) return `UTOPIA <${user}>`;
+  return `UTOPIA <onboarding@resend.dev>`;
+}
+
+function mailReplyTo() {
+  if (process.env.MAIL_REPLY_TO?.trim()) return process.env.MAIL_REPLY_TO.trim();
+  return gmailUser() || EVENT.email;
+}
 
 export const isDevMailer = () =>
-  !process.env.RESEND_API_KEY && !process.env.SMTP_URL;
+  !hasGmail() && !process.env.SMTP_URL && !process.env.RESEND_API_KEY;
+
+async function sendViaSmtp(
+  transporter: nodemailer.Transporter,
+  to: string,
+  subject: string,
+  html: string,
+  text: string,
+  attachments: Attachment[],
+  transport: string,
+): Promise<SendResult> {
+  try {
+    await transporter.sendMail({
+      from: mailFrom(),
+      to,
+      subject,
+      html,
+      text,
+      replyTo: mailReplyTo(),
+      attachments: attachments.map((file) => ({
+        filename: file.filename,
+        content: file.content,
+        contentType: file.contentType,
+      })),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "SMTP send failed";
+    throw new Error(`Gmail/SMTP rejected the email: ${message}`);
+  }
+  return { delivered: true, transport };
+}
 
 async function send(
   to: string,
@@ -31,6 +80,35 @@ async function send(
   text: string,
   attachments: Attachment[] = [],
 ): Promise<SendResult> {
+  if (hasGmail()) {
+    return sendViaSmtp(
+      nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: { user: gmailUser(), pass: gmailAppPassword() },
+      }),
+      to,
+      subject,
+      html,
+      text,
+      attachments,
+      "gmail",
+    );
+  }
+
+  if (process.env.SMTP_URL) {
+    return sendViaSmtp(
+      nodemailer.createTransport(process.env.SMTP_URL),
+      to,
+      subject,
+      html,
+      text,
+      attachments,
+      "smtp",
+    );
+  }
+
   if (process.env.RESEND_API_KEY) {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -39,12 +117,12 @@ async function send(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: FROM,
+        from: mailFrom(),
         to,
         subject,
         html,
         text,
-        reply_to: REPLY_TO,
+        reply_to: mailReplyTo(),
         attachments: attachments.map((file) => ({
           filename: file.filename,
           content: file.content.toString("base64"),
@@ -63,24 +141,6 @@ async function send(
       throw new Error(`Resend rejected the email: ${detail}`);
     }
     return { delivered: true, transport: "resend" };
-  }
-
-  if (process.env.SMTP_URL) {
-    const transporter = nodemailer.createTransport(process.env.SMTP_URL);
-    await transporter.sendMail({
-      from: FROM,
-      to,
-      subject,
-      html,
-      text,
-      replyTo: REPLY_TO,
-      attachments: attachments.map((file) => ({
-        filename: file.filename,
-        content: file.content,
-        contentType: file.contentType,
-      })),
-    });
-    return { delivered: true, transport: "smtp" };
   }
 
   console.info(
