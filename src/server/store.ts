@@ -491,6 +491,8 @@ export function attachPaymentProof(
   order.paymentProofName = proof.proofName;
   order.paymentProofMime = proof.proofMime;
   order.paymentProofData = proof.proofData;
+  // Proof is in — don't expire the reservation after the old 30-minute hold.
+  order.holdExpiresAt = Date.now() + 180 * 24 * 60 * 60 * 1000;
   persist();
   return { ok: true, order };
 }

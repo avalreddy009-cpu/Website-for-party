@@ -587,7 +587,6 @@ function CheckoutFlow({
                 quantity={quantity}
                 form={form}
                 reservation={reservation}
-                now={now}
                 copied={copied}
                 onCopy={copyReference}
               />
@@ -1529,7 +1528,6 @@ function StepDone({
   quantity,
   form,
   reservation,
-  now,
   copied,
   onCopy,
 }: {
@@ -1537,14 +1535,9 @@ function StepDone({
   quantity: number;
   form: FormState;
   reservation: Reservation;
-  now: number;
   copied: boolean;
   onCopy: () => void;
 }) {
-  const minutesLeft = now
-    ? Math.max(0, Math.ceil((reservation.holdExpiresAt - now) / 60000))
-    : EVENT.holdMinutes;
-
   return (
     <div className="flex flex-col items-center text-center">
       <motion.div
@@ -1585,9 +1578,9 @@ function StepDone({
         transition={{ duration: 0.6, delay: 0.3 }}
         className="mt-3 max-w-sm text-sm leading-relaxed text-bone/55"
       >
-        {quantity} × {tier.name} held for{" "}
-        {form.name.split(" ")[0] || "you"}. Pay the UPI from checkout if you
-        haven&apos;t yet. Once we see the credit, the pass QR lands in{" "}
+        {quantity} × {tier.name} is with us for{" "}
+        {form.name.split(" ")[0] || "you"}. We&apos;re checking the UPI
+        screenshot. When it clears, the pass QR lands in{" "}
         <span className="text-bone/85">{form.email}</span>.
       </motion.p>
 
@@ -1630,16 +1623,16 @@ function StepDone({
 
           <div className="flex w-24 flex-col items-center justify-center gap-2 p-4 text-center sm:w-28">
             <p className="font-mono text-[8px] tracking-[0.2em] text-bone/40 uppercase">
-              HOLD
+              STATUS
             </p>
             <p
-              className="font-display text-3xl leading-none font-light"
+              className="font-display text-xl leading-none font-light"
               style={{ color: tier.accent }}
             >
-              {minutesLeft}
+              IN
             </p>
             <p className="font-mono text-[8px] tracking-[0.2em] text-bone/40 uppercase">
-              MIN LEFT
+              REVIEW
             </p>
           </div>
         </div>

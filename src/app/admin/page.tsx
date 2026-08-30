@@ -366,7 +366,8 @@ function OrderRow({
   const pass = getPassById(order.passId);
   const tone = STATUS_TONE[order.status];
   const isPending = order.status === "reserved";
-  const holdExpired = isPending && now > 0 && now > order.holdExpiresAt;
+  const holdExpired =
+    isPending && !order.paidSubmittedAt && now > 0 && now > order.holdExpiresAt;
 
   return (
     <motion.div
@@ -424,7 +425,8 @@ function OrderRow({
               <Clock3 className="size-3 text-bone/25" />
               CREATED {formatRelative(order.createdAt, now)}
             </span>
-            {isPending && (
+            {isPending && order.paidSubmittedAt && <span>PROOF IN</span>}
+            {isPending && !order.paidSubmittedAt && (
               <span>HOLD {formatRelative(order.holdExpiresAt, now)}</span>
             )}
             {order.status === "paid" && order.decidedBy && (
