@@ -46,10 +46,10 @@ export function Hero({ ready }: HeroProps) {
           fill
           priority
           sizes="100vw"
-          className="film object-cover object-center opacity-55"
+          className="film object-cover object-center opacity-80"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#030307] via-[#030307]/55 to-[#030307]" />
-        <div className="absolute inset-0 bg-[radial-gradient(70%_60%_at_50%_50%,transparent,rgba(3,3,7,0.85))]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#030307]/85 via-[#030307]/45 to-[#030307]" />
+        <div className="absolute inset-0 bg-[radial-gradient(80%_70%_at_50%_45%,transparent,rgba(3,3,7,0.75))]" />
       </div>
 
       <div className="relative z-10 mx-auto grid w-full max-w-7xl items-center gap-14 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16">
@@ -78,7 +78,7 @@ export function Hero({ ready }: HeroProps) {
             <span className="sr-only">
               {EVENT.name} by {EVENT.host} — {EVENT.tagline}
             </span>
-            <span className="font-display glow-text block text-[22vw] leading-[0.82] font-light tracking-[-0.015em] text-bone uppercase sm:text-[13rem] lg:text-[11rem] xl:text-[13rem]">
+            <span className="font-display glow-text block text-[clamp(3.5rem,16vw,7rem)] leading-[0.86] font-light tracking-[-0.015em] whitespace-nowrap text-bone uppercase lg:text-[clamp(5rem,9vw,8.25rem)]">
               {ready ? (
                 <SplitText
                   text={EVENT.name}
@@ -97,7 +97,7 @@ export function Hero({ ready }: HeroProps) {
             initial={{ opacity: 0, y: 14 }}
             animate={ready ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.9, delay: 0.8, ease: EASE }}
-            className="font-mono text-[10px] tracking-[0.4em] text-bone/50 uppercase sm:text-xs"
+            className="mt-3 font-mono text-[10px] tracking-[0.4em] text-bone/50 uppercase sm:text-xs"
           >
             BY {EVENT.host}
           </motion.p>

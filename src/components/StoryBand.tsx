@@ -18,13 +18,13 @@ export function TeaserBand() {
     target: ref,
     offset: ["start end", "end start"],
   });
-  const scale = useTransform(scrollYProgress, [0, 1], [1.14, 1]);
-  const y = useTransform(scrollYProgress, [0, 1], ["-6%", "6%"]);
+  const scale = useTransform(scrollYProgress, [0, 1], [1.05, 1]);
+  const y = useTransform(scrollYProgress, [0, 1], ["-3%", "3%"]);
 
   return (
     <div
       ref={ref}
-      className="relative h-[46vh] min-h-[280px] w-full overflow-hidden border-y border-white/8 sm:h-[62vh]"
+      className="relative h-[42vh] min-h-[240px] w-full overflow-hidden border-y border-white/8 sm:h-[64vh]"
     >
       <motion.div
         style={reduced ? undefined : { scale, y }}

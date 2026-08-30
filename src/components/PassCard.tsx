@@ -62,7 +62,7 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
       whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
       viewport={{ once: true, amount: 0.25 }}
       transition={{ duration: 0.95, delay: index * 0.12, ease: EASE }}
-      className="perspective-card relative h-[600px] w-full sm:h-[620px]"
+      className="perspective-card relative h-[560px] w-full sm:h-[580px]"
     >
       <motion.div
         aria-hidden
@@ -163,7 +163,7 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
             </p>
 
             <ul className="relative mt-6 space-y-2.5">
-              {pass.perks.slice(0, 3).map((perk) => (
+              {pass.perks.slice(0, 4).map((perk) => (
                 <li
                   key={perk}
                   className="flex items-start gap-2.5 text-xs leading-snug text-bone/45"
