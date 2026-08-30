@@ -2,7 +2,10 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { EVENT } from "@/lib/event";
+import { priceOrder } from "@/lib/pricing";
 import type { PassId } from "@/lib/passes";
+import { TEST_USER, isTestUserCode } from "@/lib/test-user";
 import { derivePassDigits } from "./pass-code";
 import { getPhraseHashes } from "./phrase";
 
@@ -194,6 +197,11 @@ export type CheckResult =
   | { ok: false; reason: "unknown" | "expired" | "locked" | "mismatch"; attemptsLeft: number };
 
 export function checkCode(email: string, code: string): CheckResult {
+  if (isTestUserCode(email, code)) {
+    ensureTestBuyer();
+    return { ok: true, token: signToken(TEST_USER.email) };
+  }
+
   const record = db.verifications[email];
   if (!record) return { ok: false, reason: "unknown", attemptsLeft: 0 };
 
@@ -362,6 +370,7 @@ export function listOrders(): Order[] {
 }
 
 export function listOrdersByEmail(email: string): Order[] {
+  ensureTestBuyer();
   const needle = email.trim().toLowerCase();
   return listOrders().filter((order) => order.buyer.email === needle);
 }
@@ -406,6 +415,38 @@ function mintPass(order: Order): void {
   const passCode = derivePassDigits(order.buyer.email, order.buyer.phone);
   order.passCode = passCode;
   order.qrToken = signPurposeToken("pass-qr", `${order.id}:${passCode}`, PASS_QR_TTL_MS);
+}
+
+/** One paid Early Bird so guest LOGIN has something to show. */
+function ensureTestBuyer(): void {
+  const existing = db.orders[TEST_USER.orderId];
+  if (existing) {
+    if (existing.status === "paid" && !existing.passCode) mintPass(existing);
+    return;
+  }
+
+  const totals = priceOrder(TEST_USER.passId, TEST_USER.quantity);
+  const now = Date.now();
+  const order: Order = {
+    id: TEST_USER.orderId,
+    reference: TEST_USER.reference,
+    passId: TEST_USER.passId,
+    quantity: TEST_USER.quantity,
+    unitPrice: totals.unitPrice,
+    subtotal: totals.subtotal,
+    fee: totals.fee,
+    total: totals.total,
+    buyer: { name: TEST_USER.name, email: TEST_USER.email, phone: TEST_USER.phone },
+    status: "paid",
+    createdAt: now,
+    holdExpiresAt: now + EVENT.holdMinutes * 60 * 1000,
+    paidAt: now,
+    decidedBy: "seed",
+    utr: "TESTUTR123456",
+  };
+  mintPass(order);
+  db.orders[order.id] = order;
+  persist();
 }
 
 /**
@@ -536,3 +577,5 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
   persist();
   return { result, order, scan };
 }
+
+ensureTestBuyer();
