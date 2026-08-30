@@ -269,7 +269,7 @@ export default function DoorPage() {
               <PhraseUnlock
                 eyebrow={`${EVENT.host} · DOOR`}
                 title="Door phrase"
-                hint="Twelve words, same idea as the CMS. Door staff get this phrase — not the CMS one — so a scanner can't approve payments."
+                hint="Staff only. Twelve words."
                 submitLabel="UNLOCK DOOR"
                 endpoint="/api/door/login"
                 onUnlocked={() => setAuthed(true)}
@@ -287,9 +287,7 @@ export default function DoorPage() {
                 </p>
                 <h1 className="font-display mt-1 text-3xl font-light text-bone">Scan a pass</h1>
                 <p className="mt-2 max-w-md text-xs text-bone/45">
-                  Point the camera at the QR, or type the 6-digit door code
-                  (the big number on the pass email — not the UTP-XXXX reference).
-                  First good scan emails them that they&apos;re in.
+                  Point the camera at the pass QR, or type the 6-digit door code.
                 </p>
               </div>
               <button

@@ -125,8 +125,8 @@ export default function LoginPage() {
           </h1>
           <p className="mt-2 text-xs leading-relaxed text-bone/45">
             {step === "email"
-              ? "Use the email you bought with. We'll send a 6-digit code — no password, no staff phrase."
-              : `Sent to ${email}. Staff don't log in here.`}
+              ? "Use the email you bought with. We'll send a 6-digit code."
+              : `Sent to ${email}.`}
           </p>
 
           {step === "email" ? (

@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ShieldCheck } from "lucide-react";
 
 import { BackgroundFX } from "@/components/BackgroundFX";
 import { PhraseUnlock } from "@/components/PhraseUnlock";
@@ -31,17 +30,11 @@ export function CmsUnlock() {
           <PhraseUnlock
             eyebrow={`${EVENT.host} · CMS`}
             title="Twelve words"
-            hint="Staff only. This is not guest login — buyers use the LOGIN button on the site with their email."
+            hint="Staff only. Twelve words."
             submitLabel="UNLOCK CMS"
             endpoint="/api/admin/login"
             onUnlocked={() => router.refresh()}
           />
-          <div className="relative mt-7 flex items-start gap-2.5 border-t border-white/8 pt-5">
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-bone/30" />
-            <p className="text-[11px] leading-relaxed text-bone/35">
-              Unlisted URL. The phrase is hashed on the server. Door staff use /door, not this page.
-            </p>
-          </div>
         </motion.div>
       </main>
     </>

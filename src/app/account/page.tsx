@@ -136,9 +136,7 @@ export default function AccountPage() {
             <h1 className="font-display mt-2 text-3xl font-light text-bone sm:text-4xl">
               Your passes
             </h1>
-            <p className="mt-2 text-xs text-bone/45">
-              {email ?? "Loading…"} — this is only what you bought. Staff CMS is a different door.
-            </p>
+            <p className="mt-2 text-xs text-bone/45">{email ?? "Loading…"}</p>
           </div>
           <button
             type="button"
@@ -167,10 +165,6 @@ export default function AccountPage() {
             <div className="glass rounded-2xl px-6 py-12 text-center">
               <p className="font-mono text-[10px] tracking-[0.2em] text-bone/35 uppercase">
                 NO PASSES ON THIS EMAIL
-              </p>
-              <p className="mx-auto mt-3 max-w-sm text-xs text-bone/45">
-                If CMS already accepted you, open <span className="text-bone/70">OPEN IN MY PASSES</span> in
-                the pass email, or add the door code below.
               </p>
               <Link
                 href="/#passes"

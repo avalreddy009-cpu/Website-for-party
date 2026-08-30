@@ -54,8 +54,7 @@ export default function ScanLogsPage() {
             Scan logs
           </h1>
           <p className="mt-2 max-w-lg text-xs leading-relaxed text-bone/45">
-            Every QR the door panel looks at, including misses. First successful scan emails
-            the guest that they&apos;re inside.
+            Tonight&apos;s door scans.
           </p>
         </div>
         <button

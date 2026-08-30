@@ -138,10 +138,6 @@ export async function flushStore(): Promise<void> {
   await flushPromise;
 }
 
-export function isDurableStore(): boolean {
-  return Boolean(upstashAuth());
-}
-
 const UPSTASH_KEY = "utopia:db:v1";
 const globalHydrate = globalThis as typeof globalThis & {
   __utopiaHydrate?: Promise<void>;

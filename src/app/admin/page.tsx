@@ -49,7 +49,6 @@ export default function AdminDashboard() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [proof, setProof] = useState<{ src: string; name?: string } | null>(null);
-  const [durable, setDurable] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -63,7 +62,6 @@ export default function AdminDashboard() {
       }
       setOrders(data.orders);
       setStats(data.stats);
-      setDurable(Boolean(data.durable));
     } catch {
       setError("No connection. Try refreshing.");
     } finally {
@@ -122,26 +120,8 @@ export default function AdminDashboard() {
             Reservations
           </h1>
           <p className="mt-2 max-w-lg text-xs leading-relaxed text-bone/45">
-            Match a UPI credit against a reservation, then approve. Approving
-            emails the pass QR. The door panel at /door is a separate 12-word
-            phrase so scanner staff can&apos;t clear payments.
+            Check the UPI screenshot, then approve or reject.
           </p>
-          {durable === false && (
-            <p className="mt-3 max-w-lg rounded-xl border border-signal/35 bg-signal/8 px-3 py-2.5 text-[12px] leading-relaxed text-signal-soft">
-              Orders vanish on every deploy. Create a free Redis at{" "}
-              <a
-                href="https://console.upstash.com"
-                target="_blank"
-                rel="noreferrer"
-                className="underline"
-              >
-                console.upstash.com
-              </a>
-              , then add <span className="text-bone/80">UPSTASH_REDIS_REST_URL</span> and{" "}
-              <span className="text-bone/80">UPSTASH_REDIS_REST_TOKEN</span> in Vercel →
-              Environment Variables → Production, and Redeploy.
-            </p>
-          )}
         </div>
 
         <button
