@@ -15,6 +15,8 @@ export const EVENT = {
 
   venueName: "Ouzo Club and Kitchen",
   venueCity: "Hyderabad",
+  venueCode: "HYD",
+  timezoneCode: "IST",
   venueLine: "Ouzo Club and Kitchen · Hyderabad",
   mapsUrl: "https://maps.app.goo.gl/2RwwfkFsRRg3G3rJ6",
 

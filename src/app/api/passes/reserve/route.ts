@@ -5,14 +5,17 @@ import { getPassById } from "@/lib/passes";
 import { priceOrder } from "@/lib/pricing";
 import { fieldErrors, reserveSchema } from "@/lib/validation";
 import { sendOrderConfirmation } from "@/server/mailer";
+import { qrDataUrl } from "@/server/pass-code";
 import { clientKey, rateLimit } from "@/server/rate-limit";
 import { createOrder, verifyToken } from "@/server/store";
+import { buildUpiUri, getUpiConfig } from "@/server/upi";
 
 export const runtime = "nodejs";
 
 /**
- * Step 3: create the reservation. Prices are recomputed server-side, so a
- * tampered client payload can't change what gets charged later.
+ * Create the reservation. Prices are recomputed server-side, so a tampered
+ * client payload can't change what gets charged. UPI details are generated
+ * here too — the QR the browser shows is this server's QR, not one it invented.
  */
 export async function POST(request: Request) {
   const limited = rateLimit(clientKey(request, "reserve"), 20, 10 * 60 * 1000);
@@ -49,6 +52,14 @@ export async function POST(request: Request) {
 
   const pass = getPassById(passId);
   const totals = priceOrder(passId, quantity);
+  const upi = getUpiConfig();
+
+  if (!upi.configured) {
+    return NextResponse.json(
+      { error: "UPI isn't set up on this deployment yet. Email us the reservation and we'll take it offline." },
+      { status: 503 },
+    );
+  }
 
   const order = createOrder(
     {
@@ -63,7 +74,16 @@ export async function POST(request: Request) {
     EVENT.holdMinutes,
   );
 
-  // A failed receipt shouldn't lose a reservation we already recorded.
+  const upiUri = buildUpiUri(order.total, `UTOPIA ${order.reference}`);
+  let upiQr: string | undefined;
+  if (upiUri) {
+    try {
+      upiQr = await qrDataUrl(upiUri);
+    } catch (error) {
+      console.error("[utopia] UPI QR render failed", error);
+    }
+  }
+
   try {
     await sendOrderConfirmation(order, pass.name);
   } catch (error) {
@@ -72,8 +92,13 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
+    orderId: order.id,
     reference: order.reference,
     total: order.total,
     holdExpiresAt: order.holdExpiresAt,
+    vpa: upi.vpa,
+    payeeName: upi.payeeName,
+    upiUri,
+    upiQr,
   });
 }

@@ -1,0 +1,51 @@
+import { NextResponse } from "next/server";
+
+import { getPassById } from "@/lib/passes";
+import { getAdminSession } from "@/server/admin-session";
+import { sendPassApproved } from "@/server/mailer";
+import { clientKey, rateLimit } from "@/server/rate-limit";
+import { approveOrder } from "@/server/store";
+
+export const runtime = "nodejs";
+
+/**
+ * Manual stand-in for a payment-gateway webhook's success callback. Wire the
+ * real webhook to `approveOrder()` directly when the PG is added — it can
+ * skip this HTTP hop and this route stays as the human override.
+ */
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  }
+
+  const limited = rateLimit(clientKey(request, "admin-decision"), 60, 10 * 60 * 1000);
+  if (!limited.allowed) {
+    return NextResponse.json({ error: "Slow down a little." }, { status: 429 });
+  }
+
+  const { id } = await params;
+  const result = approveOrder(id, session.username);
+
+  if (!result.ok) {
+    if (result.reason === "not-found") {
+      return NextResponse.json({ error: "That order doesn't exist." }, { status: 404 });
+    }
+    return NextResponse.json(
+      { error: "Already decided — refresh the list." },
+      { status: 409 },
+    );
+  }
+
+  try {
+    const pass = getPassById(result.order.passId);
+    await sendPassApproved(result.order, pass.name);
+  } catch (error) {
+    console.error("[utopia] approval email failed", error);
+  }
+
+  return NextResponse.json({ ok: true, order: result.order });
+}

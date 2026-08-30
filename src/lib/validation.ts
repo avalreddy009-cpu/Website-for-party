@@ -52,6 +52,41 @@ export const reserveSchema = orderIntentSchema.extend({
   verificationToken: z.string().min(10, "Verify your email first"),
 });
 
+export const phraseLoginSchema = z.object({
+  phrase: z
+    .string()
+    .trim()
+    .min(20, "That's 12 words, spaced")
+    .max(400, "That's not a 12-word phrase"),
+});
+
+export const payProofSchema = z.object({
+  email: emailSchema,
+  reference: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/, "That doesn't look like a reservation reference"),
+  verificationToken: z.string().min(10, "Verify your email first"),
+  utr: z
+    .string()
+    .trim()
+    .max(40)
+    .optional()
+    .transform((value) => value?.replace(/\s+/g, "") || undefined)
+    .refine((value) => !value || /^[A-Za-z0-9]{8,22}$/.test(value), {
+      message: "UTR is 8–22 letters or digits if you have one",
+    }),
+});
+
+export const scanPayloadSchema = z.object({
+  payload: z.string().trim().min(4, "Scan or type the pass").max(800),
+});
+
+export const rejectOrderSchema = z.object({
+  reason: z.string().trim().max(300).optional(),
+});
+
 export type BuyerInput = z.infer<typeof buyerSchema>;
 export type OrderIntentInput = z.infer<typeof orderIntentSchema>;
 export type ReserveInput = z.infer<typeof reserveSchema>;

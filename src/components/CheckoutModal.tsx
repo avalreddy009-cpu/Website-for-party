@@ -21,6 +21,7 @@ import {
   Minus,
   Phone,
   Plus,
+  QrCode,
   RefreshCw,
   ShieldCheck,
   User,
@@ -40,10 +41,10 @@ import { priceOrder } from "@/lib/pricing";
 import { useNow } from "@/lib/useNow";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const STEPS = ["PASS", "DETAILS", "VERIFY", "CONFIRM", "DONE"] as const;
+const STEPS = ["PASS", "DETAILS", "VERIFY", "CONFIRM", "PAY", "DONE"] as const;
 
 type FormState = { name: string; email: string; phone: string };
-type Errors = Partial<Record<"name" | "email" | "phone" | "code" | "terms" | "form", string>>;
+type Errors = Partial<Record<"name" | "email" | "phone" | "code" | "terms" | "utr" | "form", string>>;
 
 const EMPTY_FORM: FormState = { name: "", email: "", phone: "" };
 
@@ -175,7 +176,16 @@ export function CheckoutModal({ open, pass, sessionId, onClose }: CheckoutModalP
 /* starts from a clean slate without syncing props into state.         */
 /* ------------------------------------------------------------------ */
 
-type Reservation = { reference: string; total: number; holdExpiresAt: number };
+type Reservation = {
+  reference: string;
+  total: number;
+  holdExpiresAt: number;
+  orderId?: string;
+  vpa?: string;
+  payeeName?: string;
+  upiUri?: string | null;
+  upiQr?: string;
+};
 
 function CheckoutFlow({
   initialPass,
@@ -205,6 +215,7 @@ function CheckoutFlow({
   const [token, setToken] = useState<string | null>(null);
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [copied, setCopied] = useState(false);
+  const [utr, setUtr] = useState("");
 
   const tier = getPassById(tierId);
   const totals = useMemo(() => priceOrder(tierId, quantity), [tierId, quantity]);
@@ -292,6 +303,10 @@ function CheckoutFlow({
       setErrors({ form: "Your verification expired. Go back and resend the code." });
       return;
     }
+    if (reservation) {
+      goTo(4);
+      return;
+    }
 
     setBusyState(true);
     setErrors({});
@@ -310,7 +325,31 @@ function CheckoutFlow({
     setReservation(result.data);
     setDirection(1);
     setStep(4);
-  }, [agreed, form, quantity, setBusyState, tierId, token]);
+  }, [agreed, form, goTo, quantity, reservation, setBusyState, tierId, token]);
+
+  const submitPay = useCallback(async () => {
+    if (!token || !reservation) {
+      setErrors({ form: "Your verification expired. Go back and resend the code." });
+      return;
+    }
+
+    setBusyState(true);
+    setErrors({});
+    const result = await postJson<{ reference: string; status: string }>("/api/passes/pay", {
+      email: form.email,
+      reference: reservation.reference,
+      verificationToken: token,
+      utr: utr.trim() || undefined,
+    });
+    setBusyState(false);
+
+    if (!result.ok) {
+      setErrors({ utr: result.fields?.utr, form: result.fields ? undefined : result.error });
+      return;
+    }
+    setDirection(1);
+    setStep(5);
+  }, [form.email, reservation, setBusyState, token, utr]);
 
   const handleNext = useCallback(() => {
     if (busy) return;
@@ -318,7 +357,8 @@ function CheckoutFlow({
     if (step === 1) return void requestCode(false);
     if (step === 2) return void confirmCode();
     if (step === 3) return void reserve();
-  }, [busy, confirmCode, goTo, requestCode, reserve, step]);
+    if (step === 4) return void submitPay();
+  }, [busy, confirmCode, goTo, requestCode, reserve, step, submitPay]);
 
   const copyReference = async () => {
     if (!reservation) return;
@@ -331,10 +371,9 @@ function CheckoutFlow({
     }
   };
 
-  const nextLabel = ["CONTINUE", "EMAIL ME A CODE", "VERIFY", "LOCK IT IN"][step];
-  const busyLabel = ["", "SENDING CODE", "CHECKING", "RESERVING"][step];
-  const canAdvance =
-    step !== 2 || code.replace(/\D/g, "").length === 6;
+  const nextLabel = ["CONTINUE", "EMAIL ME A CODE", "VERIFY", "PAY WITH UPI", "I'VE PAID"][step];
+  const busyLabel = ["", "SENDING CODE", "CHECKING", "RESERVING", "SAVING"][step];
+  const canAdvance = step !== 2 || code.replace(/\D/g, "").length === 6;
 
   const slide = {
     enter: (dir: number) => ({
@@ -383,7 +422,7 @@ function CheckoutFlow({
             id={headingId}
             className="font-display mt-2 text-2xl leading-none font-light text-bone sm:text-3xl"
           >
-            {step === 4 ? "You're on the list" : tier.name}
+            {step === 5 ? "You're on the list" : tier.name}
           </h2>
         </div>
         <button
@@ -489,6 +528,19 @@ function CheckoutFlow({
             )}
 
             {step === 4 && reservation && (
+              <StepPay
+                tier={tier}
+                reservation={reservation}
+                utr={utr}
+                error={errors.utr}
+                onUtrChange={(value) => {
+                  setUtr(value);
+                  setErrors((prev) => ({ ...prev, utr: undefined, form: undefined }));
+                }}
+              />
+            )}
+
+            {step === 5 && reservation && (
               <StepDone
                 tier={tier}
                 quantity={quantity}
@@ -519,7 +571,7 @@ function CheckoutFlow({
 
       {/* ------------------------------ footer ----------------------------- */}
       <div className="relative border-t border-white/8 bg-black/25 px-6 py-5 sm:px-8">
-        {step < 4 ? (
+        {step < 5 ? (
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="font-mono text-[8px] tracking-[0.24em] text-bone/35 uppercase">
@@ -1112,7 +1164,7 @@ function StepConfirm({
       <StepTitle
         eyebrow="STEP 04"
         title="Last look"
-        hint="Nothing is charged here. We reserve first, you pay after."
+        hint="Next screen is UPI. We don't charge a card here — you pay in your own app, we confirm it."
       />
 
       <div className="mt-6 divide-y divide-white/7 overflow-hidden rounded-2xl border border-white/9 bg-white/2">
@@ -1208,7 +1260,107 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Step 5 — reserved                                                   */
+/* Step 5 — UPI                                                        */
+/* ------------------------------------------------------------------ */
+
+function StepPay({
+  tier,
+  reservation,
+  utr,
+  error,
+  onUtrChange,
+}: {
+  tier: PassTier;
+  reservation: Reservation;
+  utr: string;
+  error?: string;
+  onUtrChange: (value: string) => void;
+}) {
+  const [copiedVpa, setCopiedVpa] = useState(false);
+
+  const copyVpa = async () => {
+    if (!reservation.vpa) return;
+    try {
+      await navigator.clipboard.writeText(reservation.vpa);
+      setCopiedVpa(true);
+      window.setTimeout(() => setCopiedVpa(false), 2000);
+    } catch {
+      setCopiedVpa(false);
+    }
+  };
+
+  return (
+    <div>
+      <StepTitle
+        eyebrow="STEP 05"
+        title="Pay on UPI"
+        hint="Scan from GPay / PhonePe / Paytm. Same amount the server priced — not a number this page made up."
+      />
+
+      <div className="mt-6 grid gap-5 sm:grid-cols-[160px_1fr] sm:items-center">
+        <div className="mx-auto flex size-40 items-center justify-center overflow-hidden rounded-2xl bg-white p-2" style={{ boxShadow: `0 0 32px -12px ${tier.accent}` }}>
+          {reservation.upiQr ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={reservation.upiQr} alt="UPI payment QR" className="size-full object-contain" />
+          ) : (
+            <QrCode className="size-10 text-void/40" />
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <p className="font-mono text-[8px] tracking-[0.22em] text-bone/35 uppercase">PAY TO</p>
+            <p className="mt-1 text-sm text-bone">{reservation.payeeName ?? "AVION Productions"}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void copyVpa()}
+            className="flex items-center gap-2 font-mono text-sm tracking-[0.04em] text-electric-100"
+          >
+            {reservation.vpa}
+            {copiedVpa ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          </button>
+          <p className="font-display text-3xl font-light text-bone tabular-nums">
+            {formatPrice(reservation.total)}
+          </p>
+          <p className="font-mono text-[9px] tracking-[0.18em] text-bone/40 uppercase">
+            NOTE · {reservation.reference}
+          </p>
+          {reservation.upiUri && (
+            <a
+              href={reservation.upiUri}
+              className="inline-flex items-center gap-2 rounded-full border border-electric-300/40 px-4 py-2 font-mono text-[9px] tracking-[0.2em] text-electric-100 uppercase"
+            >
+              OPEN UPI APP
+            </a>
+          )}
+        </div>
+      </div>
+
+      <label className="mt-6 block">
+        <span className="mb-2 flex items-center justify-between font-mono text-[9px] tracking-[0.28em] text-bone/40 uppercase">
+          UTR / UPI REF (OPTIONAL)
+          {error && <span className="text-signal-soft normal-case">{error}</span>}
+        </span>
+        <input
+          value={utr}
+          onChange={(event) => onUtrChange(event.target.value)}
+          placeholder="If the app gave you a 12-digit UTR, paste it"
+          className="w-full rounded-2xl border border-white/10 bg-white/2 px-4 py-3.5 font-mono text-sm text-bone placeholder:text-bone/25 focus:border-electric-300/60 focus:outline-none"
+          style={{ borderColor: error ? "rgba(255,59,59,0.6)" : undefined }}
+        />
+      </label>
+
+      <p className="mt-4 text-[11px] leading-relaxed text-bone/45" style={{ color: undefined }}>
+        Hitting &ldquo;I&apos;ve paid&rdquo; doesn&apos;t mint the pass. An admin checks the credit,
+        then we email a QR with your name and a 6-digit door code. Fake UTRs just get you rejected.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Step 6 — reserved                                                   */
 /* ------------------------------------------------------------------ */
 
 function StepDone({
@@ -1273,9 +1425,9 @@ function StepDone({
         className="mt-3 max-w-sm text-sm leading-relaxed text-bone/55"
       >
         {quantity} × {tier.name} held for{" "}
-        {form.name.split(" ")[0] || "you"}. The receipt is already in{" "}
-        <span className="text-bone/85">{form.email}</span>, and the payment link
-        follows there too.
+        {form.name.split(" ")[0] || "you"}. Pay the UPI from checkout if you
+        haven&apos;t yet. Once we see the credit, the pass QR lands in{" "}
+        <span className="text-bone/85">{form.email}</span>.
       </motion.p>
 
       <motion.div

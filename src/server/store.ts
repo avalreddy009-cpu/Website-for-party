@@ -3,6 +3,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { PassId } from "@/lib/passes";
+import { derivePassDigits } from "./pass-code";
+import { getPhraseHashes } from "./phrase";
+
+// Mint (or load) CMS/door phrases on first import so `next dev` prints them
+// before anyone hits /login.
+getPhraseHashes();
 
 /**
  * Deliberately small persistence layer. Everything the app needs goes through
@@ -14,7 +20,7 @@ import type { PassId } from "@/lib/passes";
  * the first thing to replace before real traffic.
  */
 
-export type OrderStatus = "reserved" | "paid" | "cancelled" | "expired";
+export type OrderStatus = "reserved" | "paid" | "rejected" | "cancelled" | "expired";
 
 export type Order = {
   id: string;
@@ -31,6 +37,31 @@ export type Order = {
   holdExpiresAt: number;
   paidAt?: number;
   paymentRef?: string;
+  utr?: string;
+  paidSubmittedAt?: number;
+  rejectedAt?: number;
+  rejectionReason?: string;
+  decidedBy?: string;
+  passCode?: string;
+  qrToken?: string;
+  enteredAt?: number;
+  entryCount?: number;
+};
+
+export type ScanResult = "admitted" | "already-in" | "invalid" | "unpaid" | "rejected";
+
+export type ScanLog = {
+  id: string;
+  orderId?: string;
+  reference?: string;
+  passCode?: string;
+  name?: string;
+  email?: string;
+  result: ScanResult;
+  payload: string;
+  at: number;
+  by: string;
+  firstEntry: boolean;
 };
 
 type Verification = {
@@ -46,6 +77,7 @@ type Verification = {
 type Db = {
   orders: Record<string, Order>;
   verifications: Record<string, Verification>;
+  scans: ScanLog[];
 };
 
 const DATA_FILE = join(process.cwd(), ".data", "utopia.json");
@@ -55,14 +87,18 @@ const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_WINDOW = 5;
 
 function emptyDb(): Db {
-  return { orders: {}, verifications: {} };
+  return { orders: {}, verifications: {}, scans: [] };
 }
 
 function load(): Db {
   try {
     if (existsSync(DATA_FILE)) {
-      const parsed = JSON.parse(readFileSync(DATA_FILE, "utf8")) as Db;
-      return { orders: parsed.orders ?? {}, verifications: parsed.verifications ?? {} };
+      const parsed = JSON.parse(readFileSync(DATA_FILE, "utf8")) as Partial<Db>;
+      return {
+        orders: parsed.orders ?? {},
+        verifications: parsed.verifications ?? {},
+        scans: Array.isArray(parsed.scans) ? parsed.scans : [],
+      };
     }
   } catch {
     // Corrupt or unreadable file: start clean rather than crashing the route.
@@ -183,33 +219,90 @@ export function checkCode(email: string, code: string): CheckResult {
 
 /* ------------------------------- tokens ------------------------------ */
 
-const TOKEN_TTL_MS = 30 * 60 * 1000;
+/**
+ * One signing primitive shared by every token this app issues. Each token is
+ * tagged with a `purpose` so a checkout email-verification token can never be
+ * replayed as an admin session (or vice versa), even though both are just
+ * HMAC-signed strings from the same secret.
+ */
+type TokenPurpose = "verify-email" | "admin-session" | "door-session" | "pass-qr";
 
-export function signToken(email: string): string {
-  const expires = Date.now() + TOKEN_TTL_MS;
-  const payload = `${email}.${expires}`;
+function signPurposeToken(purpose: TokenPurpose, subject: string, ttlMs: number): string {
+  const expires = Date.now() + ttlMs;
+  const payload = `${purpose}:${subject}:${expires}`;
   const signature = createHmac("sha256", secret()).update(payload).digest("base64url");
   return `${Buffer.from(payload).toString("base64url")}.${signature}`;
 }
 
-export function verifyToken(token: string, email: string): boolean {
+function decodePurposeToken(purpose: TokenPurpose, token: string): { subject: string } | null {
   const [encoded, signature] = token.split(".");
-  if (!encoded || !signature) return false;
+  if (!encoded || !signature) return null;
 
   let payload: string;
   try {
     payload = Buffer.from(encoded, "base64url").toString("utf8");
   } catch {
-    return false;
+    return null;
   }
 
   const expected = createHmac("sha256", secret()).update(payload).digest("base64url");
-  if (!safeEqual(signature, expected)) return false;
+  if (!safeEqual(signature, expected)) return null;
 
-  const separator = payload.lastIndexOf(".");
-  const tokenEmail = payload.slice(0, separator);
-  const expires = Number(payload.slice(separator + 1));
-  return tokenEmail === email && Number.isFinite(expires) && Date.now() < expires;
+  // Subject can contain almost anything except our own separator, so split
+  // on the first and last colon rather than assume a fixed shape.
+  const firstColon = payload.indexOf(":");
+  const lastColon = payload.lastIndexOf(":");
+  if (firstColon === -1 || lastColon === firstColon) return null;
+
+  const tokenPurpose = payload.slice(0, firstColon);
+  const subject = payload.slice(firstColon + 1, lastColon);
+  const expires = Number(payload.slice(lastColon + 1));
+
+  if (tokenPurpose !== purpose) return null;
+  if (!Number.isFinite(expires) || Date.now() >= expires) return null;
+  return { subject };
+}
+
+const TOKEN_TTL_MS = 30 * 60 * 1000;
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const PASS_QR_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+
+export function signToken(email: string): string {
+  return signPurposeToken("verify-email", email, TOKEN_TTL_MS);
+}
+
+export function verifyToken(token: string, email: string): boolean {
+  return decodePurposeToken("verify-email", token)?.subject === email;
+}
+
+/** Signed cookie payload for the admin CMS — same primitive, its own purpose tag. */
+export function signAdminSession(username: string): string {
+  return signPurposeToken("admin-session", username, ADMIN_SESSION_TTL_MS);
+}
+
+export function verifyAdminSession(token: string): { username: string } | null {
+  const decoded = decodePurposeToken("admin-session", token);
+  return decoded ? { username: decoded.subject } : null;
+}
+
+export function signDoorSession(username: string): string {
+  return signPurposeToken("door-session", username, ADMIN_SESSION_TTL_MS);
+}
+
+export function verifyDoorSession(token: string): { username: string } | null {
+  const decoded = decodePurposeToken("door-session", token);
+  return decoded ? { username: decoded.subject } : null;
+}
+
+export function verifyPassToken(token: string): { orderId: string; passCode: string } | null {
+  const decoded = decodePurposeToken("pass-qr", token);
+  if (!decoded) return null;
+  const lastColon = decoded.subject.lastIndexOf(":");
+  if (lastColon === -1) return null;
+  const orderId = decoded.subject.slice(0, lastColon);
+  const passCode = decoded.subject.slice(lastColon + 1);
+  if (!orderId || !/^\d{6}$/.test(passCode)) return null;
+  return { orderId, passCode };
 }
 
 /* ------------------------------- orders ------------------------------ */
@@ -246,12 +339,179 @@ export function getOrderByReference(ref: string): Order | undefined {
   return Object.values(db.orders).find((order) => order.reference === ref);
 }
 
+export function getOrderById(id: string): Order | undefined {
+  return db.orders[id];
+}
+
 export function listOrders(): Order[] {
   return Object.values(db.orders).sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function countPassesSold(passId: PassId): number {
   return listOrders()
-    .filter((order) => order.passId === passId && order.status !== "cancelled")
+    .filter((order) => order.passId === passId && order.status === "paid")
     .reduce((sum, order) => sum + order.quantity, 0);
+}
+
+export type PaymentProofResult =
+  | { ok: true; order: Order }
+  | { ok: false; reason: "not-found" | "already-decided" };
+
+export function attachPaymentProof(
+  referenceCode: string,
+  email: string,
+  utr?: string,
+): PaymentProofResult {
+  const order = getOrderByReference(referenceCode);
+  if (!order) return { ok: false, reason: "not-found" };
+  if (order.buyer.email !== email) return { ok: false, reason: "not-found" };
+  if (DECIDED_STATUSES.includes(order.status)) {
+    return { ok: false, reason: "already-decided" };
+  }
+  order.paidSubmittedAt = Date.now();
+  if (utr) {
+    order.utr = utr;
+    order.paymentRef = utr;
+  }
+  persist();
+  return { ok: true, order };
+}
+
+export type DecisionResult =
+  | { ok: true; order: Order }
+  | { ok: false; reason: "not-found" | "already-decided" };
+
+const DECIDED_STATUSES: OrderStatus[] = ["paid", "rejected", "cancelled"];
+
+function mintPass(order: Order): void {
+  const passCode = derivePassDigits(order.buyer.email, order.buyer.phone);
+  order.passCode = passCode;
+  order.qrToken = signPurposeToken("pass-qr", `${order.id}:${passCode}`, PASS_QR_TTL_MS);
+}
+
+/**
+ * The manual analog of a payment-gateway webhook: an admin looked at proof of
+ * payment outside the site and is vouching for it. When a real PG lands, its
+ * webhook handler should call this exact function on success instead of
+ * requiring a human to click a button — the CMS button and the webhook are
+ * meant to converge on one code path, not two.
+ */
+export function approveOrder(id: string, decidedBy?: string): DecisionResult {
+  const order = db.orders[id];
+  if (!order) return { ok: false, reason: "not-found" };
+  if (DECIDED_STATUSES.includes(order.status)) {
+    return { ok: false, reason: "already-decided" };
+  }
+
+  order.status = "paid";
+  order.paidAt = Date.now();
+  order.decidedBy = decidedBy;
+  mintPass(order);
+  persist();
+  return { ok: true, order };
+}
+
+/** The manual analog of a payment-gateway webhook reporting failure. */
+export function rejectOrder(id: string, reason?: string, decidedBy?: string): DecisionResult {
+  const order = db.orders[id];
+  if (!order) return { ok: false, reason: "not-found" };
+  if (DECIDED_STATUSES.includes(order.status)) {
+    return { ok: false, reason: "already-decided" };
+  }
+
+  order.status = "rejected";
+  order.rejectedAt = Date.now();
+  order.rejectionReason = reason;
+  order.decidedBy = decidedBy;
+  persist();
+  return { ok: true, order };
+}
+
+/* -------------------------------- scans ------------------------------- */
+
+export function listScans(limit = 200): ScanLog[] {
+  return db.scans.slice(0, limit);
+}
+
+export function parseScanPayload(raw: string): { token?: string; code?: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) return {};
+
+  if (/^\d{6}$/.test(trimmed)) return { code: trimmed };
+
+  try {
+    const url = new URL(trimmed);
+    const fromQuery = url.searchParams.get("p");
+    if (fromQuery) return { token: fromQuery };
+  } catch {
+    // Not a URL — keep parsing.
+  }
+
+  const parts = trimmed.split("|");
+  if (parts[0] === "UTP" && parts.length >= 4) {
+    return { code: parts[2], token: parts.slice(3).join("|") };
+  }
+
+  return { token: trimmed };
+}
+
+export type ScanPassResult = {
+  result: ScanResult;
+  order?: Order;
+  scan: ScanLog;
+};
+
+export function scanPass(raw: string, scannedBy: string): ScanPassResult {
+  const parsed = parseScanPayload(raw);
+  let order: Order | undefined;
+
+  if (parsed.token) {
+    const decoded = verifyPassToken(parsed.token);
+    if (decoded) {
+      const candidate = db.orders[decoded.orderId];
+      if (candidate && candidate.passCode === decoded.passCode) {
+        order = candidate;
+      }
+    }
+  }
+
+  if (!order && parsed.code) {
+    const matches = Object.values(db.orders).filter((item) => item.passCode === parsed.code);
+    const paid = matches.filter((item) => item.status === "paid");
+    if (paid.length === 1) order = paid[0];
+    else if (matches.length === 1) order = matches[0];
+  }
+
+  let result: ScanResult = "invalid";
+  if (!order) {
+    result = "invalid";
+  } else if (order.status === "rejected") {
+    result = "rejected";
+  } else if (order.status !== "paid") {
+    result = "unpaid";
+  } else if (order.enteredAt) {
+    result = "already-in";
+    order.entryCount = (order.entryCount ?? 1) + 1;
+  } else {
+    result = "admitted";
+    order.enteredAt = Date.now();
+    order.entryCount = 1;
+  }
+
+  const scan: ScanLog = {
+    id: randomBytes(8).toString("base64url"),
+    orderId: order?.id,
+    reference: order?.reference,
+    passCode: order?.passCode ?? parsed.code,
+    name: order?.buyer.name,
+    email: order?.buyer.email,
+    result,
+    payload: raw.slice(0, 240),
+    at: Date.now(),
+    by: scannedBy,
+    firstEntry: result === "admitted",
+  };
+  db.scans.unshift(scan);
+  persist();
+  return { result, order, scan };
 }

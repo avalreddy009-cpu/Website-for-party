@@ -52,92 +52,104 @@ npm run dev
 Copy `.env.example` to `.env.local`. Everything is optional in development;
 `AUTH_SECRET` is **required** in production.
 
-| Variable                            | Purpose                                              |
-| ----------------------------------- | ---------------------------------------------------- |
-| `AUTH_SECRET`                       | Signs verification tokens, hashes the 6-digit codes  |
-| `RESEND_API_KEY`                    | Send mail through Resend                             |
-| `SMTP_URL`                          | Send mail through any SMTP server instead            |
-| `MAIL_FROM` / `MAIL_REPLY_TO`       | Sender identity                                      |
-| `NEXT_PUBLIC_SITE_URL`              | Absolute URL for Open Graph images                   |
+| Variable | Purpose |
+| --- | --- |
+| `AUTH_SECRET` | Signs tokens, hashes OTPs and 12-word phrases, derives pass codes |
+| `RESEND_API_KEY` | Send mail through Resend |
+| `SMTP_URL` | Send mail through any SMTP server instead |
+| `MAIL_FROM` / `MAIL_REPLY_TO` | Sender identity |
+| `NEXT_PUBLIC_SITE_URL` | Absolute URL for Open Graph and pass QR links |
+| `UPI_VPA` / `UPI_PAYEE_NAME` | Collect-request UPI ID shown in checkout |
+| `CMS_PHRASE` / `DOOR_PHRASE` | 12 BIP39 English words (hashed in memory, never logged) |
+| `CMS_PHRASE_HASH` / `DOOR_PHRASE_HASH` | Optional precomputed hashes instead of plaintext |
+
+In development, if the phrases aren't set, the server mints a pair, writes them
+to gitignored `.data/dev-phrases.json`, and prints them to the console.
 
 ## The purchase flow
 
-Five steps, `PASS → DETAILS → VERIFY → CONFIRM → DONE`:
+Six steps, `PASS → DETAILS → VERIFY → CONFIRM → PAY → DONE`:
 
 1. **PASS** — pick a tier, set quantity (max 8), live subtotal.
 2. **DETAILS** — name, email, phone. Validated by the same Zod schema the API
    uses, so client and server can never disagree about what's acceptable.
-3. **VERIFY** — `POST /api/passes/verify` emails a 6-digit code. The six-box
-   input supports paste, arrow keys, and backspace-across-boxes; a rejected
-   code clears itself so retrying is just typing again.
+3. **VERIFY** — `POST /api/passes/verify` emails a 6-digit code.
 4. **CONFIRM** — order review, 5% booking fee, dry-event acknowledgement.
-5. **DONE** — reservation reference, hold countdown, confirmation email sent.
+5. **PAY** — UPI QR + VPA + amount from **server** pricing. Optional UTR.
+   Hitting "I've paid" does **not** issue a pass.
+6. **DONE** — reservation held. An admin confirms the UPI credit in `/admin`.
+   Approval emails the pass: name, 6-digit door code (HMAC of email+phone, not
+   a substring), and a signed QR.
+
+### Why this is not "all frontend"
+
+The landing page is a Next.js client, but money, approval, and entry are not:
+
+- Prices are recomputed in `lib/pricing.ts` on the server.
+- Email OTPs are stored as hashes, compared in constant time.
+- Checkout gets a purpose-tagged HMAC token; it cannot be replayed as CMS/door.
+- UPI amount and VPA come from the reserve API. Approving a pass is
+  `approveOrder()` on the server — the CMS button is a human stand-in for a
+  payment-gateway webhook. When a real PG lands, point its webhook at that
+  same function.
+- Pass QR payloads are HMAC-signed. A screenshot of someone else's name +
+  digits is not enough; the door panel verifies the signature.
+- CMS (`/login`) and door (`/door`) each unlock with a **different** 12-word
+  phrase so scanner staff cannot approve payments.
 
 ### API
 
-| Route                            | Does                                                        |
-| -------------------------------- | ----------------------------------------------------------- |
-| `POST /api/passes/verify`        | Issues + emails a 6-digit code (45s resend cooldown)        |
-| `POST /api/passes/verify/confirm`| Exchanges a correct code for a signed, 30-minute HMAC token |
-| `POST /api/passes/reserve`       | Creates the reservation and emails the receipt              |
-
-Hardening already in place:
-
-- Codes are stored only as SHA-256 hashes salted with `AUTH_SECRET`, compared
-  in constant time, expire after 10 minutes, and lock after 5 wrong attempts.
-- Verification tokens are HMAC-signed and bound to the email address, so a
-  reservation can't be created for an address that wasn't verified.
-- **Prices are recomputed server-side** in `lib/pricing.ts` — a tampered client
-  payload cannot change what gets charged.
-- Fixed-window rate limits per IP on all three routes, plus a per-address send
-  cap.
+| Route | Does |
+| --- | --- |
+| `POST /api/passes/verify` | Issues + emails a 6-digit code |
+| `POST /api/passes/verify/confirm` | Exchanges a correct code for a signed token |
+| `POST /api/passes/reserve` | Creates the reservation, returns UPI QR |
+| `POST /api/passes/pay` | Records optional UTR; order stays `reserved` |
+| `POST /api/admin/login` | 12-word CMS unlock → httpOnly cookie |
+| `GET /api/admin/orders` | List + stats (CMS session) |
+| `POST /api/admin/orders/:id/approve` | Marks paid, mints QR, emails pass |
+| `POST /api/admin/orders/:id/reject` | Marks rejected, emails the buyer |
+| `GET /api/admin/scans` | Door scan log |
+| `POST /api/door/login` | 12-word door unlock |
+| `POST /api/door/scan` | Verify QR/code, log it, email "you're in" on first entry |
 
 ### Storage
 
-`src/server/store.ts` is the only module that touches persistence: orders and
-verifications live in memory and are mirrored to `.data/utopia.json`. Good for
-local development and a single Node process; **replace it with a real database
-before taking money.** It already exposes `listOrders()`, `getOrderByReference()`
-and `countPassesSold()` for the admin panel.
+`src/server/store.ts` is the only persistence module: orders, OTPs, and scan
+logs live in memory and are mirrored to `.data/utopia.json`. Fine for a single
+Node process. **Vercel serverless has a read-only filesystem**, so this falls
+back to in-process memory (lost on cold start). Point `store.ts` at Postgres
+or Vercel KV before real ticket volume. The rest of the app already talks to
+the store through functions, not files.
 
-### Not done yet
+## Staff surfaces
 
-Payment gateway and admin panel. `CheckoutFlow` deliberately stops at
-`status: "reserved"` — wire the gateway into `POST /api/passes/reserve`'s
-response and flip the order to `paid` on webhook.
+- `/login` — 12-word CMS unlock (approve/reject UPI)
+- `/admin` — reservations
+- `/admin/scans` — every door scan, including misses
+- `/door` — 12-word door unlock, camera + 6-digit entry, live scan log
 
 ## Structure
 
 ```
 src/
 ├── app/
-│   ├── api/passes/…           # verify, verify/confirm, reserve
-│   ├── globals.css            # design tokens, keyframes, glass/glow/film utils
-│   ├── layout.tsx             # fonts + metadata
-│   └── page.tsx               # composition root
-├── components/
-│   ├── BackgroundFX.tsx       # room tone: glows, grid, scanlines, grain
-│   ├── Preloader.tsx          # loading sequence + shutter reveal
-│   ├── Hero.tsx               # headline + the real poster
-│   ├── StoryBand.tsx          # manifesto, teaser title card, AVION band
-│   ├── EventInfo.tsx          # date/time/venue + maps link + countdown
-│   ├── Countdown.tsx          # live countdown, rolling digits
-│   ├── PassTiers.tsx          # tier grid
-│   ├── PassCard.tsx           # 3D tilt + flip revealing everything included
-│   ├── HouseRules.tsx         # the no-alcohol rules, expandable
-│   ├── CheckoutModal.tsx      # the five-step flow
-│   ├── Footer.tsx, Marquee.tsx, Navbar.tsx
-│   └── ui/                    # Reveal/SplitText, NeonButton, brand glyphs
-├── lib/
-│   ├── event.ts               # every piece of event copy and the date logic
-│   ├── passes.ts              # the two tiers, perks, pricing
-│   ├── pricing.ts             # shared money maths
-│   ├── validation.ts          # Zod schemas + error flattening
-│   └── useNow.ts              # shared 1s clock (external store, SSR-safe)
+│   ├── api/passes/…           # verify, reserve, pay
+│   ├── api/admin/…            # phrase login, orders, scans
+│   ├── api/door/…             # phrase login, scan
+│   ├── admin/                 # CMS
+│   ├── door/                  # QR verify panel
+│   ├── login/                 # CMS phrase unlock
+│   └── page.tsx
+├── components/                # landing + checkout + PhraseUnlock
+├── lib/                       # event, passes, pricing, validation
 └── server/
-    ├── store.ts               # orders + verification codes + tokens
-    ├── mailer.ts              # Resend / SMTP / dev console, with templates
-    └── rate-limit.ts          # per-IP fixed window
+    ├── store.ts               # orders + OTPs + scans + tokens
+    ├── phrase.ts              # 12-word generate / hash / check
+    ├── pass-code.ts           # 6-digit HMAC + QR
+    ├── upi.ts                 # collect-request URI
+    ├── mailer.ts
+    └── rate-limit.ts
 ```
 
 ## Editing content

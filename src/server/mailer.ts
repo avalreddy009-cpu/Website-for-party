@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 
 import { EVENT, formatPrice } from "@/lib/event";
+import { passQrPayload, qrPngBuffer, qrDataUrl } from "./pass-code";
 import type { Order } from "./store";
 
 /**
@@ -15,13 +16,21 @@ import type { Order } from "./store";
 
 export type SendResult = { delivered: boolean; transport: string };
 
+type Attachment = { filename: string; content: Buffer; contentType?: string };
+
 const FROM = process.env.MAIL_FROM ?? `UTOPIA <onboarding@resend.dev>`;
 const REPLY_TO = process.env.MAIL_REPLY_TO ?? EVENT.email;
 
 export const isDevMailer = () =>
   !process.env.RESEND_API_KEY && !process.env.SMTP_URL;
 
-async function send(to: string, subject: string, html: string, text: string): Promise<SendResult> {
+async function send(
+  to: string,
+  subject: string,
+  html: string,
+  text: string,
+  attachments: Attachment[] = [],
+): Promise<SendResult> {
   if (process.env.RESEND_API_KEY) {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -29,7 +38,19 @@ async function send(to: string, subject: string, html: string, text: string): Pr
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from: FROM, to, subject, html, text, reply_to: REPLY_TO }),
+      body: JSON.stringify({
+        from: FROM,
+        to,
+        subject,
+        html,
+        text,
+        reply_to: REPLY_TO,
+        attachments: attachments.map((file) => ({
+          filename: file.filename,
+          content: file.content.toString("base64"),
+          content_type: file.contentType,
+        })),
+      }),
     });
     if (!response.ok) {
       throw new Error(`Resend rejected the email (${response.status})`);
@@ -39,7 +60,19 @@ async function send(to: string, subject: string, html: string, text: string): Pr
 
   if (process.env.SMTP_URL) {
     const transporter = nodemailer.createTransport(process.env.SMTP_URL);
-    await transporter.sendMail({ from: FROM, to, subject, html, text, replyTo: REPLY_TO });
+    await transporter.sendMail({
+      from: FROM,
+      to,
+      subject,
+      html,
+      text,
+      replyTo: REPLY_TO,
+      attachments: attachments.map((file) => ({
+        filename: file.filename,
+        content: file.content,
+        contentType: file.contentType,
+      })),
+    });
     return { delivered: true, transport: "smtp" };
   }
 
@@ -102,9 +135,10 @@ export async function sendOrderConfirmation(order: Order, passName: string): Pro
      </tr>`;
 
   const html = shell(
-    "You're on the list",
+    "Pay on UPI, then we lock it in",
     `<p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#c9cadb">
-       ${firstName}, we're holding ${order.quantity} × ${passName} for you. Keep this reference — it's what gets you through the door.
+       ${firstName}, we're holding ${order.quantity} × ${passName}. Pay the total from the checkout QR
+       (same amount, same UPI ID). Once we see the credit, your pass lands in this inbox.
      </p>
      <p style="margin:0 0 22px;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
                font-family:'Courier New',monospace;font-size:24px;letter-spacing:.2em;color:#ffffff">${order.reference}</p>
@@ -112,12 +146,90 @@ export async function sendOrderConfirmation(order: Order, passName: string): Pro
        ${row("Pass", passName)}
        ${row("Quantity", String(order.quantity))}
        ${row("Total", formatPrice(order.total))}
-       ${row("Status", "Reserved — payment pending")}
+       ${row("Status", "Waiting for UPI · we'll confirm")}
      </table>
      <p style="margin:22px 0 0;font-size:13px;line-height:1.7;color:#8c8fa8">
-       We'll send the payment link shortly. The hold lasts ${EVENT.holdMinutes} minutes once payment opens.
+       Put ${order.reference} in the UPI note if the app asks. Don't screenshot a random QR from Instagram — only the one in checkout.
      </p>`,
   );
-  const text = `${firstName}, ${order.quantity} x ${passName} reserved. Reference ${order.reference}. Total ${formatPrice(order.total)}.`;
-  return send(order.buyer.email, `Reserved: ${order.reference} — UTOPIA passes`, html, text);
+  const text = `${firstName}, ${order.quantity} x ${passName} reserved. Reference ${order.reference}. Total ${formatPrice(order.total)}. Pay via UPI from checkout — we email the pass after we confirm the credit.`;
+  return send(order.buyer.email, `Pay UPI: ${order.reference} — UTOPIA`, html, text);
+}
+
+export async function sendPassApproved(order: Order, passName: string): Promise<SendResult> {
+  const firstName = order.buyer.name.split(" ")[0] || "there";
+  const passCode = order.passCode ?? "------";
+  const payload = passQrPayload(order);
+  let qrSrc = "";
+  const attachments: Attachment[] = [];
+  try {
+    const png = await qrPngBuffer(payload);
+    attachments.push({ filename: `utopia-pass-${order.reference}.png`, content: png, contentType: "image/png" });
+    qrSrc = await qrDataUrl(payload);
+  } catch (error) {
+    console.error("[utopia] pass QR render failed", error);
+  }
+
+  const qrBlock = qrSrc
+    ? `<p style="margin:22px 0 8px;text-align:center">
+         <img src="${qrSrc}" alt="UTOPIA pass QR" width="220" height="220" style="width:220px;height:220px;border-radius:16px;background:#ffffff;padding:10px" />
+       </p>`
+    : "";
+
+  const html = shell(
+    "Your pass is ready",
+    `<p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#c9cadb">
+       ${firstName}, payment checked. ${order.quantity} × ${passName} is yours.
+       Show the QR at the door — it carries your name and a code that only works for you.
+     </p>
+     <p style="margin:0 0 6px;font-size:11px;letter-spacing:.24em;color:#8c8fa8;text-transform:uppercase;text-align:center">Name on the pass</p>
+     <p style="margin:0 0 18px;font-family:Georgia,'Times New Roman',serif;font-size:26px;color:#ffffff;text-align:center">${order.buyer.name}</p>
+     <p style="margin:0 0 8px;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
+               font-family:'Courier New',monospace;font-size:34px;letter-spacing:.34em;color:#ffffff">${passCode}</p>
+     <p style="margin:0 0 8px;font-size:12px;text-align:center;color:#8c8fa8">DOOR CODE · ${order.reference}</p>
+     ${qrBlock}
+     <p style="margin:12px 0 0;font-size:12px;line-height:1.7;color:#8c8fa8;text-align:center">
+       Screenshot this. The QR is also attached as a PNG if the picture above doesn't load.
+     </p>`,
+  );
+  const text = `${firstName}, you're confirmed. ${order.quantity} x ${passName}. Name: ${order.buyer.name}. Door code: ${passCode}. Reference ${order.reference}. Show the QR (attached) at Ouzo.`;
+  return send(order.buyer.email, `Your UTOPIA pass — ${passCode}`, html, text, attachments);
+}
+
+export async function sendPassRejected(
+  order: Order,
+  passName: string,
+  reason?: string,
+): Promise<SendResult> {
+  const firstName = order.buyer.name.split(" ")[0] || "there";
+  const html = shell(
+    "We couldn't confirm this one",
+    `<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#c9cadb">
+       ${firstName}, your reservation for ${order.quantity} × ${passName} (${order.reference})
+       didn't clear on our side${reason ? ` — ${reason}` : ""}.
+     </p>
+     <p style="margin:0;font-size:13px;line-height:1.7;color:#8c8fa8">
+       If you think this is a mistake, reply to this email with your UPI proof (UTR / screenshot) and we'll take another look.
+     </p>`,
+  );
+  const text = `${firstName}, we couldn't confirm ${order.reference}${reason ? ` (${reason})` : ""}. Reply with UPI proof if this looks wrong.`;
+  return send(order.buyer.email, `Couldn't confirm: ${order.reference}`, html, text);
+}
+
+export async function sendEntryNotice(order: Order): Promise<SendResult> {
+  const firstName = order.buyer.name.split(" ")[0] || "there";
+  const html = shell(
+    "You're in. That's the party.",
+    `<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#c9cadb">
+       ${firstName}, door scanned your pass. Welcome to UTOPIA — food's that way, mocktails the other,
+       and nobody here is drinking so you don't have to pretend you are either.
+     </p>
+     <p style="margin:0;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
+               font-family:'Courier New',monospace;font-size:18px;letter-spacing:.16em;color:#ffffff">${order.reference}</p>
+     <p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:#8c8fa8">
+       If this wasn't you, reply to this email right now.
+     </p>`,
+  );
+  const text = `${firstName}, you're in. Door scanned your UTOPIA pass (${order.reference}). See you on the floor.`;
+  return send(order.buyer.email, `You're in — welcome to UTOPIA`, html, text);
 }
