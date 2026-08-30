@@ -27,8 +27,14 @@ export async function GET() {
   }
 
   const wallet = await readPassWallet(session.email);
-  const fromWallet = wallet.map((pass) => importWalletPass(pass));
-  const orders = mergeOrders(listOrdersByEmail(session.email), fromWallet);
+  const fromWallet = wallet
+    .map((pass) => importWalletPass(pass))
+    .filter((order): order is Order => Boolean(order));
+  const owned = (order: Order) => order.buyer.email === session.email;
+  const orders = mergeOrders(
+    listOrdersByEmail(session.email),
+    fromWallet.filter(owned),
+  ).filter(owned);
 
   const payload = await Promise.all(
     orders.map(async (order) => {

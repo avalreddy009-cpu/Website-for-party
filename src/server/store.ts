@@ -21,6 +21,13 @@ getPhraseHashes();
 
 export type OrderStatus = "reserved" | "paid" | "rejected" | "cancelled" | "expired";
 
+export type TransferRecord = {
+  at: number;
+  by: string;
+  from: { name: string; email: string; phone: string };
+  previousPassCode?: string;
+};
+
 export type Order = {
   id: string;
   reference: string;
@@ -48,6 +55,10 @@ export type Order = {
   qrToken?: string;
   enteredAt?: number;
   entryCount?: number;
+  transferredAt?: number;
+  transferredBy?: string;
+  transferHistory?: TransferRecord[];
+  revokedPassCodes?: string[];
 };
 
 export type ScanResult = "admitted" | "already-in" | "invalid" | "unpaid" | "rejected";
@@ -543,6 +554,59 @@ export function rejectOrder(id: string, reason?: string, decidedBy?: string): De
   return { ok: true, order };
 }
 
+export type TransferResult =
+  | { ok: true; order: Order; previousBuyer: Order["buyer"] }
+  | { ok: false; reason: "not-found" | "not-paid" | "already-entered" | "unchanged" };
+
+/**
+ * Staff remint: bind a paid pass to a new name/email/phone. Old door code and
+ * QR die immediately. Already-scanned passes stay locked so a used ticket
+ * cannot be sold on after the door.
+ */
+export function transferOrder(
+  id: string,
+  buyer: { name: string; email: string; phone: string },
+  transferredBy?: string,
+): TransferResult {
+  const order = db.orders[id];
+  if (!order) return { ok: false, reason: "not-found" };
+  if (order.status !== "paid") return { ok: false, reason: "not-paid" };
+  if (order.enteredAt) return { ok: false, reason: "already-entered" };
+
+  const next = {
+    name: buyer.name.trim(),
+    email: buyer.email.trim().toLowerCase(),
+    phone: buyer.phone.trim(),
+  };
+  const samePerson =
+    order.buyer.email === next.email &&
+    order.buyer.phone.replace(/\D/g, "") === next.phone.replace(/\D/g, "") &&
+    order.buyer.name.trim().toLowerCase() === next.name.toLowerCase();
+  if (samePerson) return { ok: false, reason: "unchanged" };
+
+  const previousBuyer = { ...order.buyer };
+  const previousPassCode = order.passCode;
+  const record: TransferRecord = {
+    at: Date.now(),
+    by: transferredBy ?? "cms",
+    from: previousBuyer,
+    previousPassCode,
+  };
+
+  order.buyer = next;
+  order.transferredAt = record.at;
+  order.transferredBy = record.by;
+  order.transferHistory = [...(order.transferHistory ?? []), record].slice(-20);
+  if (previousPassCode) {
+    const revoked = new Set(order.revokedPassCodes ?? []);
+    revoked.add(previousPassCode);
+    order.revokedPassCodes = [...revoked].slice(-40);
+  }
+  mintPass(order);
+  persist();
+  return { ok: true, order, previousBuyer };
+}
+
 /* -------------------------------- scans ------------------------------- */
 
 export function listScans(limit = 200): ScanLog[] {
@@ -699,7 +763,7 @@ export function verifyPassClaim(token: string): WalletPass | null {
   }
 }
 
-export function importWalletPass(pass: WalletPass): Order {
+export function importWalletPass(pass: WalletPass): Order | null {
   const email = pass.email.trim().toLowerCase();
   const existing =
     db.orders[pass.id] ??
@@ -709,12 +773,18 @@ export function importWalletPass(pass: WalletPass): Order {
     );
 
   if (existing) {
-    if (pass.status === "paid" && existing.status !== "paid") {
+    // Stale claim / wallet after a CMS transfer must not rewrite the live pass
+    // or leak the new owner's door code to the previous inbox.
+    if (existing.status === "paid" && existing.buyer.email !== email) {
+      return null;
+    }
+    if (existing.status === "paid") {
+      return existing;
+    }
+    if (pass.status === "paid") {
       existing.status = "paid";
       existing.paidAt = existing.paidAt ?? Date.now();
     }
-    if (pass.passCode) existing.passCode = pass.passCode;
-    if (pass.qrToken) existing.qrToken = pass.qrToken;
     persist();
     return existing;
   }
@@ -759,6 +829,13 @@ export function recoverPaidPass(input: {
     return { ok: false, reason: "code-mismatch" };
   }
 
+  const revoked = Object.values(db.orders).some((order) =>
+    (order.revokedPassCodes ?? []).includes(passCode),
+  );
+  if (revoked) {
+    return { ok: false, reason: "code-mismatch" };
+  }
+
   const ref = input.reference?.trim().toUpperCase();
   const existing =
     (ref ? getOrderByReference(ref) : undefined) ??
@@ -774,6 +851,12 @@ export function recoverPaidPass(input: {
     mintPass(existing);
     persist();
     return { ok: true, order: existing };
+  }
+
+  // Don't mint a free paid pass from an old email+phone hash. Store-wipe
+  // recover still works when they bring an unused reservation reference.
+  if (!ref || !/^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(ref)) {
+    return { ok: false, reason: "code-mismatch" };
   }
 
   const now = Date.now();

@@ -93,6 +93,15 @@ export const rejectOrderSchema = z.object({
   reason: z.string().trim().max(300).optional(),
 });
 
+export const orderIdSchema = z
+  .string()
+  .trim()
+  .min(8, "That order id is too short")
+  .max(64, "That order id is too long")
+  .regex(/^[A-Za-z0-9_-]+$/, "That order id isn't valid");
+
+export const transferOrderSchema = buyerSchema;
+
 export type BuyerInput = z.infer<typeof buyerSchema>;
 export type OrderIntentInput = z.infer<typeof orderIntentSchema>;
 export type ReserveInput = z.infer<typeof reserveSchema>;

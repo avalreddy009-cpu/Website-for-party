@@ -41,6 +41,14 @@ function mailFrom() {
   return `UTOPIA <onboarding@resend.dev>`;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function mailReplyTo() {
   if (process.env.MAIL_REPLY_TO?.trim()) return process.env.MAIL_REPLY_TO.trim();
   return gmailUser() || EVENT.email;
@@ -249,7 +257,9 @@ export async function sendOrderConfirmation(order: Order, passName: string): Pro
 }
 
 export async function sendPassApproved(order: Order, passName: string): Promise<SendResult> {
-  const firstName = order.buyer.name.split(" ")[0] || "there";
+  const firstName = escapeHtml(order.buyer.name.split(" ")[0] || "there");
+  const passNameSafe = escapeHtml(passName);
+  const nameSafe = escapeHtml(order.buyer.name);
   const passCode = order.passCode ?? "------";
   const payload = passQrPayload(order);
   let qrAttached = false;
@@ -276,11 +286,11 @@ export async function sendPassApproved(order: Order, passName: string): Promise<
   const html = shell(
     "Your pass is ready",
     `<p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#c9cadb">
-       ${firstName}, payment checked. ${order.quantity} × ${passName} is yours.
+       ${firstName}, payment checked. ${order.quantity} × ${passNameSafe} is yours.
        Show the QR at the door — it carries your name and a code that only works for you.
      </p>
      <p style="margin:0 0 6px;font-size:11px;letter-spacing:.24em;color:#8c8fa8;text-transform:uppercase;text-align:center">Name on the pass</p>
-     <p style="margin:0 0 18px;font-family:Georgia,'Times New Roman',serif;font-size:26px;color:#ffffff;text-align:center">${order.buyer.name}</p>
+     <p style="margin:0 0 18px;font-family:Georgia,'Times New Roman',serif;font-size:26px;color:#ffffff;text-align:center">${nameSafe}</p>
      <p style="margin:0 0 8px;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
                font-family:'Courier New',monospace;font-size:34px;letter-spacing:.34em;color:#ffffff">${passCode}</p>
      <p style="margin:0 0 8px;font-size:12px;text-align:center;color:#8c8fa8">DOOR CODE · ${passCode} · REF ${order.reference}</p>
@@ -297,6 +307,29 @@ export async function sendPassApproved(order: Order, passName: string): Promise<
   );
   const text = `${firstName}, you're confirmed. ${order.quantity} x ${passName}. Name: ${order.buyer.name}. Door code: ${passCode}. Reference ${order.reference}. Open your pass: ${siteUrl()}/account?claim=${signPassClaim(order)}`;
   return send(order.buyer.email, `Your UTOPIA pass — ${passCode}`, html, text, attachments);
+}
+
+/** Old owner: pass moved. No new codes — those only go to the new inbox. */
+export async function sendPassTransferredAway(
+  previous: { name: string; email: string },
+  reference: string,
+  passName: string,
+): Promise<SendResult> {
+  const firstName = escapeHtml(previous.name.split(" ")[0] || "there");
+  const refSafe = escapeHtml(reference);
+  const passNameSafe = escapeHtml(passName);
+  const html = shell(
+    "Your pass was moved",
+    `<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#c9cadb">
+       ${firstName}, AVION staff moved ${passNameSafe} (${refSafe}) off this email.
+       The old QR and door code no longer work at the door.
+     </p>
+     <p style="margin:0;font-size:13px;line-height:1.7;color:#8c8fa8">
+       If you didn't ask for this, reply to this email right now.
+     </p>`,
+  );
+  const text = `${previous.name.split(" ")[0] || "there"}, your UTOPIA pass ${reference} was moved by AVION staff. The old QR and door code no longer work. Reply if this wasn't you.`;
+  return send(previous.email, `Pass moved: ${reference}`, html, text);
 }
 
 export async function sendPassRejected(

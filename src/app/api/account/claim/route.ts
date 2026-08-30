@@ -33,6 +33,12 @@ export async function POST(request: Request) {
   }
 
   const order = importWalletPass(claim);
+  if (!order) {
+    return NextResponse.json(
+      { error: "That pass was moved. Ask AVION for the new email." },
+      { status: 410 },
+    );
+  }
   await upsertPassWallet(claim.email, order);
 
   if (!session) {

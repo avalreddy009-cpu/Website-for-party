@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
+  ArrowRightLeft,
   Check,
   Clock3,
   Loader2,
@@ -47,7 +48,9 @@ export default function AdminDashboard() {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("reserved");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [transferringId, setTransferringId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [transfer, setTransfer] = useState({ name: "", email: "", phone: "" });
   const [proof, setProof] = useState<{ src: string; name?: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -100,7 +103,37 @@ export default function AdminDashboard() {
       );
       setRejectingId(null);
       setReason("");
+      setTransferringId(null);
       // Stats aggregate across the whole list, so pull a fresh copy.
+      void load();
+    } catch {
+      setError("No connection. Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const movePass = async (id: string) => {
+    setBusyId(id);
+    try {
+      const response = await fetch(`/api/admin/orders/${id}/transfer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: transfer.name.trim(),
+          email: transfer.email.trim(),
+          phone: transfer.phone.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "That transfer didn't go through.");
+        return;
+      }
+      setOrders((prev) =>
+        prev ? prev.map((order) => (order.id === id ? data.order : order)) : prev,
+      );
+      setTransferringId(null);
       void load();
     } catch {
       setError("No connection. Try again.");
@@ -120,7 +153,7 @@ export default function AdminDashboard() {
             Reservations
           </h1>
           <p className="mt-2 max-w-lg text-xs leading-relaxed text-bone/45">
-            Check the UPI screenshot, then approve or reject.
+            Check the UPI screenshot, then approve or reject. Approved passes can move to another name.
           </p>
         </div>
 
@@ -204,11 +237,15 @@ export default function AdminDashboard() {
             now={now}
             busy={busyId === order.id}
             rejecting={rejectingId === order.id}
+            transferring={transferringId === order.id}
             reason={reason}
+            transfer={transfer}
             onReasonChange={setReason}
+            onTransferChange={setTransfer}
             onApprove={() => void decide(order.id, "approve")}
             onStartReject={() => {
               setRejectingId(order.id);
+              setTransferringId(null);
               setReason("");
             }}
             onCancelReject={() => {
@@ -216,6 +253,17 @@ export default function AdminDashboard() {
               setReason("");
             }}
             onConfirmReject={() => void decide(order.id, "reject")}
+            onStartTransfer={() => {
+              setTransferringId(order.id);
+              setRejectingId(null);
+              setTransfer({
+                name: order.buyer.name,
+                email: order.buyer.email,
+                phone: order.buyer.phone,
+              });
+            }}
+            onCancelTransfer={() => setTransferringId(null)}
+            onConfirmTransfer={() => void movePass(order.id)}
             onViewProof={
               order.paymentProofData
                 ? () =>
@@ -320,12 +368,18 @@ type OrderRowProps = {
   now: number;
   busy: boolean;
   rejecting: boolean;
+  transferring: boolean;
   reason: string;
+  transfer: { name: string; email: string; phone: string };
   onReasonChange: (value: string) => void;
+  onTransferChange: (value: { name: string; email: string; phone: string }) => void;
   onApprove: () => void;
   onStartReject: () => void;
   onCancelReject: () => void;
   onConfirmReject: () => void;
+  onStartTransfer: () => void;
+  onCancelTransfer: () => void;
+  onConfirmTransfer: () => void;
   onViewProof?: () => void;
 };
 
@@ -335,12 +389,18 @@ function OrderRow({
   now,
   busy,
   rejecting,
+  transferring,
   reason,
+  transfer,
   onReasonChange,
+  onTransferChange,
   onApprove,
   onStartReject,
   onCancelReject,
   onConfirmReject,
+  onStartTransfer,
+  onCancelTransfer,
+  onConfirmTransfer,
   onViewProof,
 }: OrderRowProps) {
   const pass = getPassById(order.passId);
@@ -415,6 +475,12 @@ function OrderRow({
             {order.status === "paid" && order.passCode && (
               <span>PASS {order.passCode}</span>
             )}
+            {order.transferredAt && (
+              <span>
+                TRANSFERRED{order.transferredBy ? ` BY ${order.transferredBy}` : ""}{" "}
+                {formatRelative(order.transferredAt, now)}
+              </span>
+            )}
             {order.utr && <span>UTR {order.utr}</span>}
             {order.paymentProofName && <span>PROOF {order.paymentProofName}</span>}
             {order.status === "rejected" && (
@@ -448,6 +514,18 @@ function OrderRow({
           <p className="font-display text-2xl font-light text-bone tabular-nums">
             {formatPrice(order.total)}
           </p>
+
+          {order.status === "paid" && !order.enteredAt && !transferring && (
+            <button
+              type="button"
+              onClick={onStartTransfer}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-full border border-white/12 px-3.5 py-2 font-mono text-[9px] tracking-[0.18em] text-bone/55 uppercase transition-all duration-300 hover:border-electric-300/50 hover:text-electric-200 disabled:opacity-40"
+            >
+              <ArrowRightLeft className="size-3" />
+              TRANSFER
+            </button>
+          )}
 
           {isPending && !rejecting && (
             <div className="flex items-center gap-2">
@@ -515,6 +593,72 @@ function OrderRow({
                 >
                   {busy && <Loader2 className="size-3 animate-spin" />}
                   CONFIRM REJECT
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {transferring && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.35, ease: EASE }}
+            className="overflow-hidden"
+          >
+            <div className="mt-4 space-y-3 border-t border-white/8 pt-4">
+              <p className="font-mono text-[9px] tracking-[0.2em] text-bone/40 uppercase">
+                New name on the pass — old QR and door code die
+              </p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <input
+                  value={transfer.name}
+                  onChange={(event) =>
+                    onTransferChange({ ...transfer, name: event.target.value })
+                  }
+                  placeholder="Name at the door"
+                  autoFocus
+                  className="rounded-xl border border-white/10 bg-white/2 px-3.5 py-2.5 text-sm text-bone placeholder:text-bone/30 focus:border-electric-300/50 focus:outline-none"
+                />
+                <input
+                  type="email"
+                  value={transfer.email}
+                  onChange={(event) =>
+                    onTransferChange({ ...transfer, email: event.target.value })
+                  }
+                  placeholder="Email"
+                  className="rounded-xl border border-white/10 bg-white/2 px-3.5 py-2.5 text-sm text-bone placeholder:text-bone/30 focus:border-electric-300/50 focus:outline-none"
+                />
+                <input
+                  type="tel"
+                  value={transfer.phone}
+                  onChange={(event) =>
+                    onTransferChange({ ...transfer, phone: event.target.value })
+                  }
+                  placeholder="Phone"
+                  className="rounded-xl border border-white/10 bg-white/2 px-3.5 py-2.5 text-sm text-bone placeholder:text-bone/30 focus:border-electric-300/50 focus:outline-none"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onCancelTransfer}
+                  disabled={busy}
+                  className="rounded-full border border-white/12 px-3.5 py-2 font-mono text-[9px] tracking-[0.18em] text-bone/55 uppercase transition-colors hover:text-bone disabled:opacity-40"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={onConfirmTransfer}
+                  disabled={busy}
+                  className="flex items-center gap-1.5 rounded-full bg-bone px-4 py-2 font-mono text-[9px] font-bold tracking-[0.18em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] disabled:scale-100 disabled:opacity-60"
+                >
+                  {busy && <Loader2 className="size-3 animate-spin" />}
+                  CONFIRM TRANSFER
                 </button>
               </div>
             </div>
