@@ -53,7 +53,14 @@ async function send(
       }),
     });
     if (!response.ok) {
-      throw new Error(`Resend rejected the email (${response.status})`);
+      let detail = `HTTP ${response.status}`;
+      try {
+        const body = (await response.json()) as { message?: string };
+        if (body.message) detail = body.message;
+      } catch {
+        // keep the status code if Resend didn't return JSON
+      }
+      throw new Error(`Resend rejected the email: ${detail}`);
     }
     return { delivered: true, transport: "resend" };
   }
