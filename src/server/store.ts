@@ -457,11 +457,16 @@ export function listScans(limit = 200): ScanLog[] {
   return db.scans.slice(0, limit);
 }
 
-export function parseScanPayload(raw: string): { token?: string; code?: string } {
+export function parseScanPayload(raw: string): { token?: string; code?: string; reference?: string } {
   const trimmed = raw.trim();
   if (!trimmed) return {};
 
-  if (/^\d{6}$/.test(trimmed)) return { code: trimmed };
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 6) return { code: digits };
+
+  if (/^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(trimmed)) {
+    return { reference: trimmed.toUpperCase() };
+  }
 
   try {
     const url = new URL(trimmed);
@@ -497,6 +502,10 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
         order = candidate;
       }
     }
+  }
+
+  if (!order && parsed.reference) {
+    order = getOrderByReference(parsed.reference);
   }
 
   if (!order && parsed.code) {

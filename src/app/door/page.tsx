@@ -15,6 +15,7 @@ import {
 
 import { BackgroundFX } from "@/components/BackgroundFX";
 import { PhraseUnlock } from "@/components/PhraseUnlock";
+import { decodeQrFromVideo } from "@/lib/decode-qr-frame";
 import { EVENT } from "@/lib/event";
 import { getPassById } from "@/lib/passes";
 import type { ScanLog, ScanResult } from "@/server/store";
@@ -72,8 +73,11 @@ export default function DoorPage() {
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef(false);
+  const busyRef = useRef(false);
+  const submitScanRef = useRef<(payload: string) => Promise<void>>(async () => {});
   const autoScanned = useRef(false);
 
   const loadLogs = useCallback(async () => {
@@ -104,7 +108,8 @@ export default function DoorPage() {
   const submitScan = useCallback(
     async (payload: string) => {
       const value = payload.trim();
-      if (!value || busy) return;
+      if (!value || busyRef.current) return;
+      busyRef.current = true;
       setBusy(true);
       setError(null);
       try {
@@ -124,11 +129,16 @@ export default function DoorPage() {
       } catch {
         setError("No connection. Try again.");
       } finally {
+        busyRef.current = false;
         setBusy(false);
       }
     },
-    [busy, loadLogs],
+    [loadLogs],
   );
+
+  useEffect(() => {
+    submitScanRef.current = submitScan;
+  }, [submitScan]);
 
   useEffect(() => {
     if (!authed || autoScanned.current || typeof window === "undefined") return;
@@ -149,63 +159,65 @@ export default function DoorPage() {
     }
 
     let cancelled = false;
+    let raf = 0;
     const start = async () => {
       setCameraError(null);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
         });
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+        const video = videoRef.current;
+        if (video) {
+          video.setAttribute("playsinline", "true");
+          video.setAttribute("webkit-playsinline", "true");
+          video.srcObject = stream;
+          await video.play();
         }
 
-        type Detector = { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> };
-        const DetectorCtor = (
-          window as unknown as { BarcodeDetector?: new (opts: { formats: string[] }) => Detector }
-        ).BarcodeDetector;
-        if (!DetectorCtor) {
-          setCameraError("This browser can't scan QR from camera. Type the 6-digit code instead.");
-          return;
-        }
-        const detector = new DetectorCtor({ formats: ["qr_code"] });
-        const tick = async () => {
-          if (cancelled || !videoRef.current || scanningRef.current) {
-            if (!cancelled) requestAnimationFrame(() => void tick());
-            return;
-          }
-          try {
-            const codes = await detector.detect(videoRef.current);
-            const value = codes[0]?.rawValue;
-            if (value) {
-              scanningRef.current = true;
-              await submitScan(value);
-              window.setTimeout(() => {
-                scanningRef.current = false;
-              }, 1600);
-            }
-          } catch {
-            // Keep the loop alive if a frame fails.
-          }
-          if (!cancelled) requestAnimationFrame(() => void tick());
+        if (!canvasRef.current) canvasRef.current = document.createElement("canvas");
+        const canvas = canvasRef.current;
+        let lastAttempt = 0;
+
+        const tick = () => {
+          if (cancelled) return;
+          raf = requestAnimationFrame(tick);
+          const live = videoRef.current;
+          if (!live || scanningRef.current) return;
+          const now = Date.now();
+          if (now - lastAttempt < 140) return;
+          lastAttempt = now;
+
+          const value = decodeQrFromVideo(live, canvas);
+          if (!value) return;
+          scanningRef.current = true;
+          void submitScanRef.current(value).finally(() => {
+            window.setTimeout(() => {
+              scanningRef.current = false;
+            }, 1800);
+          });
         };
-        requestAnimationFrame(() => void tick());
+        raf = requestAnimationFrame(tick);
       } catch {
-        setCameraError("Camera permission denied. Type the door code instead.");
+        setCameraError("Camera permission denied. Type the 6-digit door code instead.");
       }
     };
     void start();
     return () => {
       cancelled = true;
+      cancelAnimationFrame(raf);
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     };
-  }, [cameraOn, submitScan]);
+  }, [cameraOn]);
 
   const logout = async () => {
     await fetch("/api/door/logout", { method: "POST" });
@@ -248,8 +260,9 @@ export default function DoorPage() {
                 </p>
                 <h1 className="font-display mt-1 text-3xl font-light text-bone">Scan a pass</h1>
                 <p className="mt-2 max-w-md text-xs text-bone/45">
-                  Point the camera at the QR, or type the 6-digit door code. First good scan emails
-                  them that they&apos;re in.
+                  Point the camera at the QR, or type the 6-digit door code
+                  (the big number on the pass email — not the UTP-XXXX reference).
+                  First good scan emails them that they&apos;re in.
                 </p>
               </div>
               <button
@@ -312,7 +325,7 @@ export default function DoorPage() {
                   <input
                     value={manual}
                     onChange={(event) => setManual(event.target.value)}
-                    placeholder="6-digit code or paste QR payload"
+                    placeholder="6-digit door code, UTP-XXXX ref, or QR payload"
                     className="flex-1 bg-transparent px-2 py-2 font-mono text-sm text-bone placeholder:text-bone/30 focus:outline-none"
                   />
                   <button

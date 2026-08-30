@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 
 import { EVENT, formatPrice } from "@/lib/event";
-import { passQrPayload, qrPngBuffer, qrDataUrl } from "./pass-code";
+import { passQrPayload, qrPngBuffer } from "./pass-code";
 import type { Order } from "./store";
 
 /**
@@ -14,7 +14,12 @@ import type { Order } from "./store";
 
 export type SendResult = { delivered: boolean; transport: string };
 
-type Attachment = { filename: string; content: Buffer; contentType?: string };
+type Attachment = {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+  cid?: string;
+};
 
 function gmailUser() {
   return process.env.GMAIL_USER?.trim() ?? "";
@@ -64,6 +69,8 @@ async function sendViaSmtp(
         filename: file.filename,
         content: file.content,
         contentType: file.contentType,
+        cid: file.cid,
+        contentDisposition: file.cid ? ("inline" as const) : ("attachment" as const),
       })),
     });
   } catch (error) {
@@ -127,6 +134,7 @@ async function send(
           filename: file.filename,
           content: file.content.toString("base64"),
           content_type: file.contentType,
+          content_id: file.cid,
         })),
       }),
     });
@@ -243,19 +251,24 @@ export async function sendPassApproved(order: Order, passName: string): Promise<
   const firstName = order.buyer.name.split(" ")[0] || "there";
   const passCode = order.passCode ?? "------";
   const payload = passQrPayload(order);
-  let qrSrc = "";
+  let qrAttached = false;
   const attachments: Attachment[] = [];
   try {
     const png = await qrPngBuffer(payload);
-    attachments.push({ filename: `utopia-pass-${order.reference}.png`, content: png, contentType: "image/png" });
-    qrSrc = await qrDataUrl(payload);
+    attachments.push({
+      filename: `utopia-pass-${order.reference}.png`,
+      content: png,
+      contentType: "image/png",
+      cid: "utopia-pass-qr",
+    });
+    qrAttached = true;
   } catch (error) {
     console.error("[utopia] pass QR render failed", error);
   }
 
-  const qrBlock = qrSrc
+  const qrBlock = qrAttached
     ? `<p style="margin:22px 0 8px;text-align:center">
-         <img src="${qrSrc}" alt="UTOPIA pass QR" width="220" height="220" style="width:220px;height:220px;border-radius:16px;background:#ffffff;padding:10px" />
+         <img src="cid:utopia-pass-qr" alt="UTOPIA pass QR" width="220" height="220" style="width:220px;height:220px;border-radius:16px;background:#ffffff;padding:10px" />
        </p>`
     : "";
 
@@ -269,7 +282,7 @@ export async function sendPassApproved(order: Order, passName: string): Promise<
      <p style="margin:0 0 18px;font-family:Georgia,'Times New Roman',serif;font-size:26px;color:#ffffff;text-align:center">${order.buyer.name}</p>
      <p style="margin:0 0 8px;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
                font-family:'Courier New',monospace;font-size:34px;letter-spacing:.34em;color:#ffffff">${passCode}</p>
-     <p style="margin:0 0 8px;font-size:12px;text-align:center;color:#8c8fa8">DOOR CODE · ${order.reference}</p>
+     <p style="margin:0 0 8px;font-size:12px;text-align:center;color:#8c8fa8">DOOR CODE · ${passCode} · REF ${order.reference}</p>
      ${qrBlock}
      <p style="margin:12px 0 0;font-size:12px;line-height:1.7;color:#8c8fa8;text-align:center">
        Screenshot this. The QR is also attached as a PNG if the picture above doesn't load.
