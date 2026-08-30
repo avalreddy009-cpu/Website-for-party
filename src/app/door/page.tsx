@@ -17,6 +17,7 @@ import { BackgroundFX } from "@/components/BackgroundFX";
 import { PhraseUnlock } from "@/components/PhraseUnlock";
 import { decodeQrFromVideo } from "@/lib/decode-qr-frame";
 import { EVENT } from "@/lib/event";
+import { looksLikeManualPass, looksLikePassQr } from "@/lib/pass-scan";
 import { getPassById } from "@/lib/passes";
 import type { ScanLog, ScanResult } from "@/server/store";
 
@@ -77,7 +78,9 @@ export default function DoorPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef(false);
   const busyRef = useRef(false);
-  const submitScanRef = useRef<(payload: string) => Promise<void>>(async () => {});
+  const submitScanRef = useRef<
+    (payload: string, source?: "manual" | "camera" | "url") => Promise<void>
+  >(async () => {});
   const autoScanned = useRef(false);
 
   const loadLogs = useCallback(async () => {
@@ -106,9 +109,15 @@ export default function DoorPage() {
   }, [authed, loadLogs]);
 
   const submitScan = useCallback(
-    async (payload: string) => {
+    async (payload: string, source: "manual" | "camera" | "url" = "manual") => {
       const value = payload.trim();
       if (!value || busyRef.current) return;
+      if (source === "camera" && !looksLikePassQr(value)) return;
+      if (source === "manual" && !looksLikeManualPass(value)) {
+        setError("Type the 6-digit door code, or point the camera at the pass QR.");
+        return;
+      }
+
       busyRef.current = true;
       setBusy(true);
       setError(null);
@@ -121,6 +130,10 @@ export default function DoorPage() {
         const data = (await response.json()) as ScanResponse;
         if (!response.ok) {
           setError(data.error ?? "Scan didn't go through.");
+          return;
+        }
+        if (source === "camera" && data.result === "invalid") {
+          void loadLogs();
           return;
         }
         setLatest(data);
@@ -146,7 +159,7 @@ export default function DoorPage() {
     if (!payload) return;
     autoScanned.current = true;
     const timeout = window.setTimeout(() => {
-      void submitScan(payload);
+      void submitScan(payload, "url");
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [authed, submitScan]);
@@ -186,6 +199,8 @@ export default function DoorPage() {
         if (!canvasRef.current) canvasRef.current = document.createElement("canvas");
         const canvas = canvasRef.current;
         let lastAttempt = 0;
+        let stableValue = "";
+        let stableHits = 0;
 
         const tick = () => {
           if (cancelled) return;
@@ -193,16 +208,28 @@ export default function DoorPage() {
           const live = videoRef.current;
           if (!live || scanningRef.current) return;
           const now = Date.now();
-          if (now - lastAttempt < 140) return;
+          if (now - lastAttempt < 180) return;
           lastAttempt = now;
 
           const value = decodeQrFromVideo(live, canvas);
-          if (!value) return;
+          if (!value || !looksLikePassQr(value)) {
+            stableValue = "";
+            stableHits = 0;
+            return;
+          }
+          if (value === stableValue) stableHits += 1;
+          else {
+            stableValue = value;
+            stableHits = 1;
+          }
+          if (stableHits < 3) return;
+
           scanningRef.current = true;
-          void submitScanRef.current(value).finally(() => {
+          stableHits = 0;
+          void submitScanRef.current(value, "camera").finally(() => {
             window.setTimeout(() => {
               scanningRef.current = false;
-            }, 1800);
+            }, 2000);
           });
         };
         raf = requestAnimationFrame(tick);
@@ -318,7 +345,7 @@ export default function DoorPage() {
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
-                    void submitScan(manual);
+                    void submitScan(manual, "manual");
                   }}
                   className="glass flex items-center gap-2 rounded-2xl px-3 py-2"
                 >

@@ -48,6 +48,7 @@ export default function AdminDashboard() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [proof, setProof] = useState<{ src: string; name?: string } | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -217,9 +218,61 @@ export default function AdminDashboard() {
               setReason("");
             }}
             onConfirmReject={() => void decide(order.id, "reject")}
+            onViewProof={
+              order.paymentProofData
+                ? () =>
+                    setProof({
+                      src: order.paymentProofData as string,
+                      name: order.paymentProofName,
+                    })
+                : undefined
+            }
           />
         ))}
       </div>
+
+      <AnimatePresence>
+        {proof && (
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Payment screenshot"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setProof(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="relative max-h-[90svh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-3"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setProof(null)}
+                className="absolute top-3 right-3 z-10 flex size-9 items-center justify-center rounded-full bg-void/80 text-bone"
+                aria-label="Close"
+              >
+                <X className="size-4" />
+              </button>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={proof.src}
+                alt={proof.name ?? "Payment screenshot"}
+                className="mx-auto max-h-[82svh] w-full object-contain"
+              />
+              {proof.name && (
+                <p className="mt-2 text-center font-mono text-[10px] tracking-[0.16em] text-void/45 uppercase">
+                  {proof.name}
+                </p>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -275,6 +328,7 @@ type OrderRowProps = {
   onStartReject: () => void;
   onCancelReject: () => void;
   onConfirmReject: () => void;
+  onViewProof?: () => void;
 };
 
 function OrderRow({
@@ -289,6 +343,7 @@ function OrderRow({
   onStartReject,
   onCancelReject,
   onConfirmReject,
+  onViewProof,
 }: OrderRowProps) {
   const pass = getPassById(order.passId);
   const tone = STATUS_TONE[order.status];
@@ -370,20 +425,22 @@ function OrderRow({
             )}
           </div>
 
-          {order.paymentProofData && (
-            <a
-              href={order.paymentProofData}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-block overflow-hidden rounded-xl border border-white/10"
+          {order.paymentProofData && onViewProof && (
+            <button
+              type="button"
+              onClick={onViewProof}
+              className="mt-4 w-full max-w-md overflow-hidden rounded-2xl border border-white/12 bg-white p-2 text-left"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={order.paymentProofData}
-                alt="Payment screenshot"
-                className="h-28 w-28 object-cover"
+                alt={order.paymentProofName ?? "Payment screenshot"}
+                className="max-h-72 w-full object-contain"
               />
-            </a>
+              <span className="mt-2 block font-mono text-[8px] tracking-[0.18em] text-void/45 uppercase">
+                TAP TO VIEW FULL
+              </span>
+            </button>
           )}
         </div>
 

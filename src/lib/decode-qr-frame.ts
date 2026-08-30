@@ -22,7 +22,20 @@ export function decodeQrFromVideo(
   ctx.drawImage(video, 0, 0, width, height);
   const image = ctx.getImageData(0, 0, width, height);
   const code = jsQR(image.data, image.width, image.height, {
-    inversionAttempts: "attemptBoth",
+    inversionAttempts: "dontInvert",
   });
-  return code?.data?.trim() || null;
+  if (!code?.data) return null;
+
+  const { topLeftCorner, topRightCorner, bottomLeftCorner } = code.location;
+  const edgeW = Math.hypot(
+    topRightCorner.x - topLeftCorner.x,
+    topRightCorner.y - topLeftCorner.y,
+  );
+  const edgeH = Math.hypot(
+    bottomLeftCorner.x - topLeftCorner.x,
+    bottomLeftCorner.y - topLeftCorner.y,
+  );
+  if (edgeW < 72 || edgeH < 72) return null;
+
+  return code.data.trim() || null;
 }
