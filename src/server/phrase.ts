@@ -100,7 +100,11 @@ export function getPhraseHashes(): HashSet {
 
   if (process.env.NODE_ENV === "production") {
     cache = { cmsHash, doorHash };
-    if (!announced && (!cmsHash || !doorHash)) {
+    if (
+      !announced &&
+      (!cmsHash || !doorHash) &&
+      process.env.NEXT_PHASE !== "phase-production-build"
+    ) {
       announced = true;
       console.error(
         "[utopia] Set CMS_PHRASE and DOOR_PHRASE (or *_PHRASE_HASH) in the environment. CMS and door login stay locked until you do.",
