@@ -109,6 +109,9 @@ function load(): Db {
 // Survive dev-server hot reloads.
 const globalRef = globalThis as typeof globalThis & { __utopiaDb?: Db };
 const db: Db = (globalRef.__utopiaDb ??= load());
+if (!db.orders) db.orders = {};
+if (!db.verifications) db.verifications = {};
+if (!Array.isArray(db.scans)) db.scans = [];
 
 let persistWarned = false;
 
@@ -430,6 +433,7 @@ export function rejectOrder(id: string, reason?: string, decidedBy?: string): De
 /* -------------------------------- scans ------------------------------- */
 
 export function listScans(limit = 200): ScanLog[] {
+  if (!Array.isArray(db.scans)) db.scans = [];
   return db.scans.slice(0, limit);
 }
 
@@ -511,6 +515,7 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
     by: scannedBy,
     firstEntry: result === "admitted",
   };
+  if (!Array.isArray(db.scans)) db.scans = [];
   db.scans.unshift(scan);
   persist();
   return { result, order, scan };
