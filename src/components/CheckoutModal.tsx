@@ -252,17 +252,29 @@ function CheckoutFlow({
     [form, goTo, quantity, setBusyState, tierId],
   );
 
-  /** Verify → exchange the code for a signed token. */
-  const confirmCode = useCallback(async () => {
+  /**
+   * Verify → exchange the code for a signed token. The last digit typed is
+   * passed in directly: the auto-submit fires from the same tick as the state
+   * update, so reading `code` here would see five digits, not six.
+   */
+  const confirmCode = useCallback(async (override?: string) => {
+    const value = (override ?? code).replace(/\D/g, "");
+    if (value.length !== 6) {
+      setErrors({ code: "All six digits, please." });
+      return;
+    }
+
     setBusyState(true);
     setErrors({});
     const result = await postJson<{ verificationToken: string }>(
       "/api/passes/verify/confirm",
-      { email: form.email, code },
+      { email: form.email, code: value },
     );
     setBusyState(false);
 
     if (!result.ok) {
+      // Wipe the boxes so a retry is just "type it again", not "clear it first".
+      setCode("");
       setErrors({ code: result.fields?.code ?? result.error });
       return;
     }
@@ -456,7 +468,7 @@ function CheckoutFlow({
                   setCode(value);
                   setErrors((prev) => ({ ...prev, code: undefined }));
                 }}
-                onComplete={handleNext}
+                onComplete={(value) => void confirmCode(value)}
                 onResend={() => void requestCode(true)}
               />
             )}
@@ -931,7 +943,7 @@ function StepVerify({
   resendIn: number;
   busy: boolean;
   onCodeChange: (value: string) => void;
-  onComplete: () => void;
+  onComplete: (value?: string) => void;
   onResend: () => void;
 }) {
   const boxes = useRef<(HTMLInputElement | null)[]>([]);
@@ -942,12 +954,16 @@ function StepVerify({
     return () => window.clearTimeout(id);
   }, []);
 
-  const write = (next: string) => {
+  // A rejected code clears itself, so send the caret back to the first box.
+  useEffect(() => {
+    if (error) boxes.current[0]?.focus();
+  }, [error]);
+
+  const write = (next: string, focusAt?: number) => {
     const clean = next.replace(/\D/g, "").slice(0, 6);
     onCodeChange(clean);
-    const focusIndex = Math.min(clean.length, 5);
-    boxes.current[focusIndex]?.focus();
-    if (clean.length === 6) window.setTimeout(onComplete, 120);
+    boxes.current[focusAt ?? Math.min(clean.length, 5)]?.focus();
+    if (clean.length === 6) window.setTimeout(() => onComplete(clean), 120);
   };
 
   return (
@@ -990,8 +1006,12 @@ function StepVerify({
               write(chars.join("").replace(/ /g, ""));
             }}
             onKeyDown={(event) => {
+              // Backspace in an empty box eats the previous digit, the way
+              // every other one-time-code field behaves.
               if (event.key === "Backspace" && !digit.trim() && i > 0) {
-                boxes.current[i - 1]?.focus();
+                event.preventDefault();
+                write(code.slice(0, Math.max(0, i - 1)), i - 1);
+                return;
               }
               if (event.key === "ArrowLeft" && i > 0) boxes.current[i - 1]?.focus();
               if (event.key === "ArrowRight" && i < 5) boxes.current[i + 1]?.focus();
