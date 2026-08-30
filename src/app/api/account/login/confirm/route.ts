@@ -4,13 +4,14 @@ import { NextResponse } from "next/server";
 import { confirmCodeSchema, fieldErrors } from "@/lib/validation";
 import { BUYER_SESSION_COOKIE } from "@/server/admin-auth";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { checkCode, signBuyerSession } from "@/server/store";
+import { checkCode, hydrateStore, signBuyerSession } from "@/server/store";
 
 export const runtime = "nodejs";
 
 const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60;
 
 export async function POST(request: Request) {
+  await hydrateStore();
   const limited = rateLimit(clientKey(request, "account-confirm"), 30, 10 * 60 * 1000);
   if (!limited.allowed) {
     return NextResponse.json(

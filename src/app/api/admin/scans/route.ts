@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 
 import { getAdminSession } from "@/server/admin-session";
-import { listScans } from "@/server/store";
+import { hydrateStore, listScans } from "@/server/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  await hydrateStore();
   const session = await getAdminSession();
   if (!session) {
     return NextResponse.json({ error: "Sign in first." }, { status: 401 });

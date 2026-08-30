@@ -4,7 +4,7 @@ import { getPassById } from "@/lib/passes";
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassApproved } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { approveOrder } from "@/server/store";
+import { approveOrder, hydrateStore } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -17,6 +17,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  await hydrateStore();
   const session = await getAdminSession();
   if (!session) {
     return NextResponse.json({ error: "Sign in first." }, { status: 401 });

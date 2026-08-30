@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 
 import { confirmCodeSchema, fieldErrors } from "@/lib/validation";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { checkCode } from "@/server/store";
+import { checkCode, hydrateStore } from "@/server/store";
 
 export const runtime = "nodejs";
 
 /** Step 2: exchange a correct code for a short-lived signed token. */
 export async function POST(request: Request) {
+  await hydrateStore();
   const limited = rateLimit(clientKey(request, "confirm"), 30, 10 * 60 * 1000);
   if (!limited.allowed) {
     return NextResponse.json(

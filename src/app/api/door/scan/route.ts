@@ -4,11 +4,12 @@ import { fieldErrors, scanPayloadSchema } from "@/lib/validation";
 import { getDoorSession } from "@/server/admin-session";
 import { sendEntryNotice } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { listScans, scanPass } from "@/server/store";
+import { hydrateStore, listScans, scanPass } from "@/server/store";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  await hydrateStore();
   const session = await getDoorSession();
   if (!session) {
     return NextResponse.json({ error: "Unlock the door panel first." }, { status: 401 });
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  await hydrateStore();
   const session = await getDoorSession();
   if (!session) {
     return NextResponse.json({ error: "Unlock the door panel first." }, { status: 401 });

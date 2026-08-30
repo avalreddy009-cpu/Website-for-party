@@ -5,7 +5,7 @@ import { fieldErrors, rejectOrderSchema } from "@/lib/validation";
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassRejected } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { rejectOrder } from "@/server/store";
+import { hydrateStore, rejectOrder } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -14,6 +14,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  await hydrateStore();
   const session = await getAdminSession();
   if (!session) {
     return NextResponse.json({ error: "Sign in first." }, { status: 401 });

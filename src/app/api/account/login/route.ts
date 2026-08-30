@@ -3,12 +3,13 @@ import { NextResponse } from "next/server";
 import { emailLoginSchema, fieldErrors } from "@/lib/validation";
 import { isDevMailer, sendLoginCode } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { issueCode } from "@/server/store";
+import { hydrateStore, issueCode } from "@/server/store";
 
 export const runtime = "nodejs";
 
 /** Guest login step 1: email a 6-digit code. Not the CMS. */
 export async function POST(request: Request) {
+  await hydrateStore();
   const limited = rateLimit(clientKey(request, "account-login"), 12, 10 * 60 * 1000);
   if (!limited.allowed) {
     return NextResponse.json(

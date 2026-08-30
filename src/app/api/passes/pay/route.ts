@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 
 import { fieldErrors, payProofSchema } from "@/lib/validation";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { attachPaymentProof, verifyToken } from "@/server/store";
+import { upsertPassWallet } from "@/server/pass-wallet";
+import { attachPaymentProof, hydrateStore, verifyToken } from "@/server/store";
 
 export const runtime = "nodejs";
 
 /** Buyer says they paid. Requires a 12-digit UTR and screenshot; order stays reserved until CMS approval. */
 export async function POST(request: Request) {
+  await hydrateStore();
   const limited = rateLimit(clientKey(request, "pay-proof"), 20, 10 * 60 * 1000);
   if (!limited.allowed) {
     return NextResponse.json(
@@ -56,6 +58,8 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ error: "We couldn't find that reservation." }, { status: 404 });
   }
+
+  await upsertPassWallet(email, result.order);
 
   return NextResponse.json({
     ok: true,

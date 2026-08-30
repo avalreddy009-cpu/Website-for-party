@@ -22,6 +22,7 @@ type AccountOrder = {
   passCode?: string;
   enteredAt?: number;
   utr?: string;
+  passQr?: string;
 };
 
 const TONE: Record<string, string> = {
@@ -38,6 +39,10 @@ export default function AccountPage() {
   const [orders, setOrders] = useState<AccountOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [recoverOpen, setRecoverOpen] = useState(false);
+  const [recover, setRecover] = useState({ phone: "", passCode: "", reference: "" });
+  const [recoverBusy, setRecoverBusy] = useState(false);
+  const [recoverError, setRecoverError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -59,11 +64,30 @@ export default function AccountPage() {
   }, [router]);
 
   useEffect(() => {
+    const claim = new URLSearchParams(window.location.search).get("claim");
     const timeout = window.setTimeout(() => {
-      void load();
+      void (async () => {
+        if (claim) {
+          try {
+            const response = await fetch("/api/account/claim", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token: claim }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              setError(data.error ?? "Couldn't add that pass from the email link.");
+            }
+          } catch {
+            setError("Couldn't add that pass from the email link.");
+          }
+          router.replace("/account");
+        }
+        await load();
+      })();
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [load]);
+  }, [load, router]);
 
   const signOut = async () => {
     setSigningOut(true);
@@ -72,6 +96,30 @@ export default function AccountPage() {
     } finally {
       router.push("/");
       router.refresh();
+    }
+  };
+
+  const submitRecover = async () => {
+    setRecoverBusy(true);
+    setRecoverError(null);
+    try {
+      const response = await fetch("/api/account/recover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(recover),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setRecoverError(data.error ?? "Couldn't add that pass.");
+        return;
+      }
+      setRecover({ phone: "", passCode: "", reference: "" });
+      setRecoverOpen(false);
+      await load();
+    } catch {
+      setRecoverError("No connection. Try again.");
+    } finally {
+      setRecoverBusy(false);
     }
   };
 
@@ -120,6 +168,10 @@ export default function AccountPage() {
               <p className="font-mono text-[10px] tracking-[0.2em] text-bone/35 uppercase">
                 NO PASSES ON THIS EMAIL
               </p>
+              <p className="mx-auto mt-3 max-w-sm text-xs text-bone/45">
+                If CMS already accepted you, open <span className="text-bone/70">OPEN IN MY PASSES</span> in
+                the pass email, or add the door code below.
+              </p>
               <Link
                 href="/#passes"
                 className="mt-4 inline-block font-mono text-[10px] tracking-[0.2em] text-electric-200 uppercase"
@@ -149,9 +201,24 @@ export default function AccountPage() {
                   {order.quantity} × {pass.name} · {formatPrice(order.total)}
                 </p>
                 {order.passCode && (
-                  <p className="mt-2 font-mono text-lg tracking-[0.28em] text-bone">
-                    {order.passCode}
-                  </p>
+                  <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+                    {order.passQr && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={order.passQr}
+                        alt="Pass QR"
+                        className="size-32 rounded-xl bg-white p-2"
+                      />
+                    )}
+                    <div>
+                      <p className="font-mono text-[8px] tracking-[0.22em] text-bone/35 uppercase">
+                        DOOR CODE
+                      </p>
+                      <p className="mt-1 font-mono text-2xl tracking-[0.28em] text-bone">
+                        {order.passCode}
+                      </p>
+                    </div>
+                  </div>
                 )}
                 {order.status === "reserved" && (
                   <p className="mt-2 text-xs text-bone/45">
@@ -167,6 +234,57 @@ export default function AccountPage() {
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-8">
+          <button
+            type="button"
+            onClick={() => setRecoverOpen((open) => !open)}
+            className="font-mono text-[10px] tracking-[0.2em] text-electric-200 uppercase"
+          >
+            {recoverOpen ? "CLOSE" : "ADD A PASS FROM YOUR EMAIL"}
+          </button>
+          {recoverOpen && (
+            <form
+              className="glass mt-3 space-y-3 rounded-2xl p-5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitRecover();
+              }}
+            >
+              <p className="text-xs text-bone/50">
+                Use the 6-digit door code from the pass email and the phone you used at checkout.
+              </p>
+              <input
+                value={recover.phone}
+                onChange={(event) => setRecover((prev) => ({ ...prev, phone: event.target.value }))}
+                placeholder="Phone on the booking"
+                className="w-full rounded-xl border border-white/10 bg-white/2 px-3 py-3 font-mono text-sm text-bone placeholder:text-bone/30 focus:outline-none"
+              />
+              <input
+                value={recover.passCode}
+                onChange={(event) => setRecover((prev) => ({ ...prev, passCode: event.target.value }))}
+                placeholder="6-digit door code"
+                inputMode="numeric"
+                maxLength={6}
+                className="w-full rounded-xl border border-white/10 bg-white/2 px-3 py-3 font-mono text-sm tracking-[0.2em] text-bone placeholder:text-bone/30 focus:outline-none"
+              />
+              <input
+                value={recover.reference}
+                onChange={(event) => setRecover((prev) => ({ ...prev, reference: event.target.value }))}
+                placeholder="UTP-XXXX-XXXX (optional)"
+                className="w-full rounded-xl border border-white/10 bg-white/2 px-3 py-3 font-mono text-sm text-bone placeholder:text-bone/30 focus:outline-none"
+              />
+              {recoverError && <p className="text-[12px] text-signal-soft">{recoverError}</p>}
+              <button
+                type="submit"
+                disabled={recoverBusy}
+                className="rounded-full bg-bone px-5 py-2.5 font-mono text-[10px] font-bold tracking-[0.18em] text-void uppercase disabled:opacity-50"
+              >
+                {recoverBusy ? "ADDING…" : "ADD PASS"}
+              </button>
+            </form>
+          )}
         </div>
       </main>
     </>

@@ -3,12 +3,13 @@ import { NextResponse } from "next/server";
 import { orderIntentSchema, fieldErrors } from "@/lib/validation";
 import { isDevMailer, sendVerificationCode } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { issueCode } from "@/server/store";
+import { hydrateStore, issueCode } from "@/server/store";
 
 export const runtime = "nodejs";
 
 /** Step 1 of checkout: email a 6-digit code to the address on the order. */
 export async function POST(request: Request) {
+  await hydrateStore();
   const limited = rateLimit(clientKey(request, "verify"), 12, 10 * 60 * 1000);
   if (!limited.allowed) {
     return NextResponse.json(

@@ -125,10 +125,101 @@ function persist(): void {
     if (!persistWarned) {
       persistWarned = true;
       console.warn(
-        "[utopia] Filesystem is read-only — orders are in memory only. Point store.ts at a database before going live.",
+        "[utopia] Filesystem is read-only — orders live in memory on this instance. Set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN so MY PASSES and the door see CMS approvals.",
       );
     }
   }
+  void persistRemote();
+}
+
+const UPSTASH_KEY = "utopia:db:v1";
+const globalHydrate = globalThis as typeof globalThis & {
+  __utopiaRemoteHydrated?: boolean;
+  __utopiaHydrate?: Promise<void>;
+};
+
+function upstashAuth(): { url: string; token: string } | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, "");
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  return { url, token };
+}
+
+function snapshotDb(): Db {
+  return { orders: db.orders, verifications: db.verifications, scans: db.scans };
+}
+
+function mergeRemote(remote: Partial<Db>): void {
+  const rank = (status: OrderStatus) =>
+    status === "paid" ? 4 : status === "reserved" ? 3 : status === "rejected" ? 2 : 1;
+
+  for (const [id, incoming] of Object.entries(remote.orders ?? {})) {
+    const current = db.orders[id];
+    if (!current || rank(incoming.status) >= rank(current.status)) {
+      db.orders[id] = incoming;
+    }
+  }
+  for (const [email, incoming] of Object.entries(remote.verifications ?? {})) {
+    const current = db.verifications[email];
+    if (!current || incoming.lastSentAt >= current.lastSentAt) {
+      db.verifications[email] = incoming;
+    }
+  }
+  if (Array.isArray(remote.scans) && remote.scans.length > 0) {
+    const seen = new Set(db.scans.map((scan) => scan.id));
+    const extra = remote.scans.filter((scan) => !seen.has(scan.id));
+    if (extra.length > 0) {
+      db.scans = [...extra, ...db.scans].sort((a, b) => b.at - a.at).slice(0, 400);
+    }
+  }
+}
+
+async function persistRemote(): Promise<void> {
+  const auth = upstashAuth();
+  if (!auth) return;
+  try {
+    await fetch(auth.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${auth.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(["SET", UPSTASH_KEY, JSON.stringify(snapshotDb())]),
+    });
+  } catch (error) {
+    console.error("[utopia] remote store write failed", error);
+  }
+}
+
+export async function hydrateStore(): Promise<void> {
+  if (globalHydrate.__utopiaRemoteHydrated) return;
+  if (globalHydrate.__utopiaHydrate) {
+    await globalHydrate.__utopiaHydrate;
+    return;
+  }
+  const auth = upstashAuth();
+  if (!auth) {
+    globalHydrate.__utopiaRemoteHydrated = true;
+    return;
+  }
+  globalHydrate.__utopiaHydrate = (async () => {
+    try {
+      const response = await fetch(`${auth.url}/get/${encodeURIComponent(UPSTASH_KEY)}`, {
+        headers: { Authorization: `Bearer ${auth.token}` },
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as { result?: string | null };
+      if (payload.result) {
+        mergeRemote(JSON.parse(payload.result) as Partial<Db>);
+      }
+    } catch (error) {
+      console.error("[utopia] remote store read failed", error);
+    } finally {
+      globalHydrate.__utopiaRemoteHydrated = true;
+      globalHydrate.__utopiaHydrate = undefined;
+    }
+  })();
+  await globalHydrate.__utopiaHydrate;
 }
 
 function secret(): string {
@@ -548,4 +639,159 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
   db.scans.unshift(scan);
   persist();
   return { result, order, scan };
+}
+
+/* -------------------- pass wallet / claim (cross-instance) -------------------- */
+
+export type WalletPass = {
+  id: string;
+  reference: string;
+  passId: PassId;
+  quantity: number;
+  total: number;
+  status: OrderStatus;
+  createdAt: number;
+  passCode?: string;
+  qrToken?: string;
+  name: string;
+  email: string;
+  phone: string;
+  enteredAt?: number;
+};
+
+export function toWalletPass(order: Order): WalletPass {
+  return {
+    id: order.id,
+    reference: order.reference,
+    passId: order.passId,
+    quantity: order.quantity,
+    total: order.total,
+    status: order.status,
+    createdAt: order.createdAt,
+    passCode: order.passCode,
+    qrToken: order.qrToken,
+    name: order.buyer.name,
+    email: order.buyer.email,
+    phone: order.buyer.phone,
+    enteredAt: order.enteredAt,
+  };
+}
+
+export function signPassClaim(order: Order): string {
+  const body = Buffer.from(JSON.stringify(toWalletPass(order))).toString("base64url");
+  const signature = createHmac("sha256", secret()).update(`pass-claim:${body}`).digest("base64url");
+  return `${body}.${signature}`;
+}
+
+export function verifyPassClaim(token: string): WalletPass | null {
+  const [body, signature] = token.split(".");
+  if (!body || !signature) return null;
+  const expected = createHmac("sha256", secret()).update(`pass-claim:${body}`).digest("base64url");
+  if (!safeEqual(signature, expected)) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as WalletPass;
+    if (!parsed.email || !parsed.reference || !parsed.id) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function importWalletPass(pass: WalletPass): Order {
+  const email = pass.email.trim().toLowerCase();
+  const existing =
+    db.orders[pass.id] ??
+    getOrderByReference(pass.reference) ??
+    Object.values(db.orders).find(
+      (order) => order.buyer.email === email && order.passCode && order.passCode === pass.passCode,
+    );
+
+  if (existing) {
+    if (pass.status === "paid" && existing.status !== "paid") {
+      existing.status = "paid";
+      existing.paidAt = existing.paidAt ?? Date.now();
+    }
+    if (pass.passCode) existing.passCode = pass.passCode;
+    if (pass.qrToken) existing.qrToken = pass.qrToken;
+    persist();
+    return existing;
+  }
+
+  const order: Order = {
+    id: pass.id || randomBytes(12).toString("base64url"),
+    reference: pass.reference,
+    passId: pass.passId,
+    quantity: pass.quantity,
+    unitPrice: pass.total,
+    subtotal: pass.total,
+    fee: 0,
+    total: pass.total,
+    buyer: { name: pass.name, email, phone: pass.phone },
+    status: pass.status,
+    createdAt: pass.createdAt,
+    holdExpiresAt: pass.createdAt + 30 * 60 * 1000,
+    passCode: pass.passCode,
+    qrToken: pass.qrToken,
+    paidAt: pass.status === "paid" ? Date.now() : undefined,
+    enteredAt: pass.enteredAt,
+  };
+  if (order.status === "paid" && !order.passCode) mintPass(order);
+  db.orders[order.id] = order;
+  persist();
+  return order;
+}
+
+export function recoverPaidPass(input: {
+  email: string;
+  phone: string;
+  name?: string;
+  passCode: string;
+  reference?: string;
+  passId?: PassId;
+  quantity?: number;
+}): { ok: true; order: Order } | { ok: false; reason: "code-mismatch" } {
+  const email = input.email.trim().toLowerCase();
+  const phone = input.phone.replace(/\D/g, "");
+  const passCode = input.passCode.replace(/\D/g, "");
+  if (derivePassDigits(email, phone) !== passCode) {
+    return { ok: false, reason: "code-mismatch" };
+  }
+
+  const ref = input.reference?.trim().toUpperCase();
+  const existing =
+    (ref ? getOrderByReference(ref) : undefined) ??
+    Object.values(db.orders).find(
+      (order) => order.buyer.email === email && order.passCode === passCode,
+    );
+
+  if (existing) {
+    if (existing.buyer.email !== email) return { ok: false, reason: "code-mismatch" };
+    existing.buyer.phone = phone;
+    existing.status = "paid";
+    existing.paidAt = existing.paidAt ?? Date.now();
+    mintPass(existing);
+    persist();
+    return { ok: true, order: existing };
+  }
+
+  const now = Date.now();
+  const order: Order = {
+    id: randomBytes(12).toString("base64url"),
+    reference: ref && /^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(ref) ? ref : reference(),
+    passId: input.passId ?? "vip",
+    quantity: input.quantity ?? 1,
+    unitPrice: 0,
+    subtotal: 0,
+    fee: 0,
+    total: 0,
+    buyer: { name: input.name?.trim() || email.split("@")[0] || "Guest", email, phone },
+    status: "paid",
+    createdAt: now,
+    holdExpiresAt: now,
+    paidAt: now,
+  };
+  mintPass(order);
+  db.orders[order.id] = order;
+  persist();
+  return { ok: true, order };
 }

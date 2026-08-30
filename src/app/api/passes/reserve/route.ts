@@ -7,7 +7,8 @@ import { fieldErrors, reserveSchema } from "@/lib/validation";
 import { sendOrderConfirmation } from "@/server/mailer";
 import { qrDataUrl } from "@/server/pass-code";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { createOrder, verifyToken } from "@/server/store";
+import { upsertPassWallet } from "@/server/pass-wallet";
+import { createOrder, hydrateStore, verifyToken } from "@/server/store";
 import { buildUpiUri, getUpiConfig } from "@/server/upi";
 
 export const runtime = "nodejs";
@@ -18,6 +19,7 @@ export const runtime = "nodejs";
  * here too — the QR the browser shows is this server's QR, not one it invented.
  */
 export async function POST(request: Request) {
+  await hydrateStore();
   const limited = rateLimit(clientKey(request, "reserve"), 20, 10 * 60 * 1000);
   if (!limited.allowed) {
     return NextResponse.json(
@@ -89,6 +91,8 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[utopia] confirmation email failed", error);
   }
+
+  await upsertPassWallet(email, order);
 
   return NextResponse.json({
     ok: true,

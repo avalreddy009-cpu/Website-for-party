@@ -1,8 +1,9 @@
 import nodemailer from "nodemailer";
 
 import { EVENT, formatPrice } from "@/lib/event";
+import { siteUrl } from "@/lib/site";
 import { passQrPayload, qrPngBuffer } from "./pass-code";
-import type { Order } from "./store";
+import { signPassClaim, type Order } from "./store";
 
 /**
  * Transports, first match wins:
@@ -284,11 +285,17 @@ export async function sendPassApproved(order: Order, passName: string): Promise<
                font-family:'Courier New',monospace;font-size:34px;letter-spacing:.34em;color:#ffffff">${passCode}</p>
      <p style="margin:0 0 8px;font-size:12px;text-align:center;color:#8c8fa8">DOOR CODE · ${passCode} · REF ${order.reference}</p>
      ${qrBlock}
+     <p style="margin:18px 0 0;text-align:center">
+       <a href="${siteUrl()}/account?claim=${encodeURIComponent(signPassClaim(order))}"
+          style="display:inline-block;padding:12px 22px;background:#9aa4ff;color:#030307;border-radius:999px;font-size:12px;letter-spacing:.16em;text-decoration:none;font-weight:700">
+         OPEN IN MY PASSES
+       </a>
+     </p>
      <p style="margin:12px 0 0;font-size:12px;line-height:1.7;color:#8c8fa8;text-align:center">
        Screenshot this. The QR is also attached as a PNG if the picture above doesn't load.
      </p>`,
   );
-  const text = `${firstName}, you're confirmed. ${order.quantity} x ${passName}. Name: ${order.buyer.name}. Door code: ${passCode}. Reference ${order.reference}. Show the QR (attached) at Ouzo.`;
+  const text = `${firstName}, you're confirmed. ${order.quantity} x ${passName}. Name: ${order.buyer.name}. Door code: ${passCode}. Reference ${order.reference}. Open your pass: ${siteUrl()}/account?claim=${signPassClaim(order)}`;
   return send(order.buyer.email, `Your UTOPIA pass — ${passCode}`, html, text, attachments);
 }
 
