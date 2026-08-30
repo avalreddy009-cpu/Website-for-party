@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Anton, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { Bodoni_Moda, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const anton = Anton({
-  variable: "--font-anton",
+// The AVION logotype is a high-contrast Didone, so the whole site speaks in one.
+const bodoni = Bodoni_Moda({
+  variable: "--font-display",
   subsets: ["latin"],
-  weight: "400",
   display: "swap",
 });
 
@@ -22,27 +22,31 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UTOPIA — by AVION Productions",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  ),
+  title: "UTOPIA — by AVION Productions | Sep 27, Ouzo Club Hyderabad",
   description:
-    "UTOPIA: the state of escape, and the party for the right people. September 27th, 12:00 PM – 5:00 PM. An AVION Productions underground day rave.",
+    "UTOPIA: a state of escape. The party for the right people. Sunday 27 September, 12–5 PM at Ouzo Club and Kitchen, Hyderabad. Unlimited food, unlimited mocktails, zero alcohol.",
   keywords: [
     "UTOPIA",
     "AVION Productions",
-    "rave",
-    "underground party",
-    "day rave",
-    "techno",
+    "Hyderabad day party",
+    "Ouzo Club and Kitchen",
+    "no alcohol party",
+    "September 27",
   ],
   openGraph: {
     title: "UTOPIA — by AVION Productions",
     description:
-      "The state of escape, and the party for the right people. Sept 27 · 12:00 PM – 5:00 PM.",
+      "A state of escape. Sunday 27 September, 12–5 PM at Ouzo Club and Kitchen, Hyderabad.",
     type: "website",
+    images: ["/media/poster.jpg"],
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#030308",
+  themeColor: "#030307",
   colorScheme: "dark",
 };
 
@@ -50,7 +54,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${anton.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${bodoni.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="bg-void text-bone flex min-h-full flex-col">
         {children}

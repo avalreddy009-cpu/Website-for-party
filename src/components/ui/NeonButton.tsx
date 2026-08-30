@@ -57,7 +57,7 @@ export function NeonButton({
       ? "px-9 py-4 text-xs sm:px-12 sm:py-5 sm:text-sm"
       : "px-6 py-3 text-[11px]";
 
-  const base = `group relative inline-flex items-center justify-center gap-3 overflow-hidden rounded-full font-mono font-bold tracking-[0.24em] uppercase transition-colors duration-300 ${sizing} ${
+  const base = `group relative inline-flex items-center justify-center gap-3 overflow-hidden rounded-full font-mono font-bold tracking-[0.2em] uppercase transition-colors duration-300 ${sizing} ${
     disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
   } ${className ?? ""}`;
 
@@ -71,8 +71,8 @@ export function NeonButton({
         </>
       ) : (
         <>
-          <span className="absolute inset-0 border border-bone/25 rounded-full transition-colors duration-300 group-hover:border-cyan-glow/70" />
-          <span className="absolute inset-0 bg-cyan-glow/0 transition-colors duration-500 group-hover:bg-cyan-glow/8" />
+          <span className="absolute inset-0 border border-bone/25 rounded-full transition-colors duration-300 group-hover:border-electric-300/70" />
+          <span className="absolute inset-0 bg-electric-300/0 transition-colors duration-500 group-hover:bg-electric-300/8" />
         </>
       )}
 
@@ -82,9 +82,9 @@ export function NeonButton({
           className="pointer-events-none absolute -inset-6 rounded-full"
           animate={{
             boxShadow: [
-              "0 0 24px -6px rgba(31,91,255,0.55)",
-              "0 0 66px 4px rgba(85,230,255,0.5)",
-              "0 0 24px -6px rgba(31,91,255,0.55)",
+              "0 0 24px -6px rgba(96,105,240,0.5)",
+              "0 0 62px 4px rgba(125,139,255,0.45)",
+              "0 0 24px -6px rgba(96,105,240,0.5)",
             ],
           }}
           transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}

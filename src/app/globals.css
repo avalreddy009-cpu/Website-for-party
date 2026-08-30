@@ -1,24 +1,29 @@
 @import "tailwindcss";
 
 @theme {
-  --color-void: #030308;
-  --color-void-soft: #07080f;
-  --color-ink: #0b0d17;
+  --color-void: #030307;
+  --color-void-soft: #07080e;
+  --color-ink: #0b0c16;
 
-  --color-electric-50: #eaf2ff;
-  --color-electric-100: #cfe1ff;
-  --color-electric-200: #a5c8ff;
-  --color-electric-300: #6ea6ff;
-  --color-electric-400: #3d82ff;
-  --color-electric-500: #1f5bff;
-  --color-electric-600: #1443db;
-  --color-electric-700: #0d2f9e;
+  /* Periwinkle sampled straight off the UTOPIA poster. */
+  --color-electric-50: #eeefff;
+  --color-electric-100: #dcdfff;
+  --color-electric-200: #bcc2ff;
+  --color-electric-300: #9aa4ff;
+  --color-electric-400: #7d8bff;
+  --color-electric-500: #6069f0;
+  --color-electric-600: #4a4fd6;
+  --color-electric-700: #2f31a0;
 
-  --color-cyan-glow: #55e6ff;
-  --color-violet-haze: #6b3bff;
-  --color-bone: #f3f5ff;
+  /* The red from the teaser's UTOPIA title card. Used for warnings and VIP. */
+  --color-signal: #ff3b3b;
+  --color-signal-soft: #ff7a7a;
 
-  --font-display: var(--font-anton), "Impact", sans-serif;
+  --color-cyan-glow: #9aa4ff;
+  --color-violet-haze: #5b4bff;
+  --color-bone: #f4f4f8;
+
+  --font-display: var(--font-display), "Times New Roman", serif;
   --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono-rave), ui-monospace, monospace;
 
@@ -192,35 +197,42 @@
 @utility glass-strong {
   background: linear-gradient(
     155deg,
-    rgba(14, 18, 38, 0.92),
-    rgba(4, 6, 14, 0.96)
+    rgba(15, 16, 34, 0.93),
+    rgba(4, 4, 11, 0.97)
   );
   backdrop-filter: blur(26px) saturate(150%);
   -webkit-backdrop-filter: blur(26px) saturate(150%);
-  border: 1px solid rgba(110, 166, 255, 0.16);
+  border: 1px solid rgba(154, 164, 255, 0.15);
+}
+
+/* Cinematic grade applied to the real event photography. */
+@utility film {
+  filter: saturate(0.75) contrast(1.15) brightness(0.62);
 }
 
 @utility text-stroke {
-  -webkit-text-stroke: 1.5px rgba(243, 245, 255, 0.42);
+  -webkit-text-stroke: 1px rgba(244, 244, 248, 0.34);
   color: transparent;
 }
 
 @utility text-stroke-thin {
-  -webkit-text-stroke: 1px rgba(110, 166, 255, 0.5);
+  -webkit-text-stroke: 1px rgba(154, 164, 255, 0.5);
   color: transparent;
 }
 
+/* The soft bloom the AVION title card has — light spilling off the serif. */
 @utility glow-text {
   text-shadow:
-    0 0 14px rgba(31, 91, 255, 0.55),
-    0 0 46px rgba(85, 230, 255, 0.28);
+    0 0 18px rgba(244, 244, 248, 0.35),
+    0 0 55px rgba(125, 139, 255, 0.32),
+    0 0 120px rgba(96, 105, 240, 0.2);
 }
 
 @utility glow-ring {
   box-shadow:
-    0 0 0 1px rgba(110, 166, 255, 0.35),
-    0 0 28px -4px rgba(31, 91, 255, 0.6),
-    0 0 80px -20px rgba(85, 230, 255, 0.45);
+    0 0 0 1px rgba(154, 164, 255, 0.3),
+    0 0 28px -4px rgba(96, 105, 240, 0.55),
+    0 0 80px -20px rgba(125, 139, 255, 0.4);
 }
 
 @utility grain {

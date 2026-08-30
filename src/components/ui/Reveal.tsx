@@ -112,7 +112,7 @@ type SectionLabelProps = {
 export function SectionLabel({ children, className }: SectionLabelProps) {
   return (
     <div
-      className={`flex items-center gap-3 font-mono text-[10px] tracking-[0.42em] text-electric-200/70 uppercase sm:text-xs ${className ?? ""}`}
+      className={`flex items-center gap-3 font-mono text-[10px] tracking-[0.42em] text-electric-200/65 uppercase sm:text-xs ${className ?? ""}`}
     >
       <span className="from-electric-400 h-px w-8 bg-gradient-to-r to-transparent sm:w-14" />
       {children}

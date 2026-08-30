@@ -6,10 +6,10 @@ import { motion, useReducedMotion } from "framer-motion";
 import { EVENT } from "@/lib/event";
 
 const BOOT_LINES = [
-  "CALIBRATING SOUND SYSTEM",
-  "CHARGING STROBE ARRAY",
-  "DECRYPTING LOCATION",
-  "OPENING THE GATE",
+  "WARMING UP THE RIG",
+  "POINTING THE LASERS",
+  "STOCKING THE MOCKTAIL BAR",
+  "UNLOCKING THE DOOR",
 ];
 
 type PreloaderProps = {
@@ -28,16 +28,16 @@ export function Preloader({ onComplete }: PreloaderProps) {
       return () => window.clearTimeout(timeout);
     }
 
-    const duration = 2600;
+    const duration = 2400;
     const start = performance.now();
     let frame = 0;
 
     const tick = (now: number) => {
       const elapsed = now - start;
       const linear = Math.min(elapsed / duration, 1);
-      // Ease out, then a stutter near the end so the loader feels mechanical.
       const eased = 1 - Math.pow(1 - linear, 3);
-      const stutter = linear > 0.82 && linear < 0.92 ? -0.03 : 0;
+      // A small stall near the end so it reads as a projector, not a spinner.
+      const stutter = linear > 0.83 && linear < 0.92 ? -0.028 : 0;
       setProgress(Math.min(100, Math.max(0, (eased + stutter) * 100)));
 
       if (linear < 1) {
@@ -45,7 +45,7 @@ export function Preloader({ onComplete }: PreloaderProps) {
       } else if (!completed.current) {
         completed.current = true;
         setExiting(true);
-        window.setTimeout(onComplete, 1150);
+        window.setTimeout(onComplete, 1100);
       }
     };
 
@@ -67,25 +67,25 @@ export function Preloader({ onComplete }: PreloaderProps) {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.4, delay: 0.5 } }}
     >
-      <div className="absolute inset-0 bg-[#020207]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(31,91,255,0.22),transparent_58%)]" />
+      <div className="absolute inset-0 bg-[#020206]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(96,105,240,0.16),transparent_58%)]" />
       <div className="noise-overlay absolute inset-0 opacity-[0.14] mix-blend-soft-light" />
 
       <motion.div
-        className="absolute top-0 left-0 h-[38%] w-full bg-[linear-gradient(to_bottom,transparent,rgba(85,230,255,0.09),transparent)]"
+        className="absolute top-0 left-0 h-[38%] w-full bg-[linear-gradient(to_bottom,transparent,rgba(154,164,255,0.07),transparent)]"
         animate={{ y: ["-40%", "260%"] }}
         transition={{ duration: 2.4, repeat: Infinity, ease: "linear" }}
       />
 
-      {/* Shutter panels that split apart to hand off to the hero. */}
+      {/* Shutters part to hand the screen over to the hero. */}
       <motion.div
-        className="absolute inset-x-0 top-0 z-20 h-1/2 origin-top border-b border-electric-400/30 bg-[#020207]"
+        className="absolute inset-x-0 top-0 z-20 h-1/2 origin-top border-b border-electric-400/25 bg-[#020206]"
         initial={{ y: 0 }}
         animate={isExiting ? { y: "-100%" } : { y: 0 }}
         transition={{ duration: 1, ease: [0.76, 0, 0.24, 1], delay: 0.15 }}
       />
       <motion.div
-        className="absolute inset-x-0 bottom-0 z-20 h-1/2 origin-bottom border-t border-electric-400/30 bg-[#020207]"
+        className="absolute inset-x-0 bottom-0 z-20 h-1/2 origin-bottom border-t border-electric-400/25 bg-[#020206]"
         initial={{ y: 0 }}
         animate={isExiting ? { y: "100%" } : { y: 0 }}
         transition={{ duration: 1, ease: [0.76, 0, 0.24, 1], delay: 0.15 }}
@@ -95,13 +95,13 @@ export function Preloader({ onComplete }: PreloaderProps) {
         className="relative z-30 flex w-full max-w-xl flex-col items-center gap-8 px-6 text-center"
         animate={
           isExiting
-            ? { opacity: 0, scale: 1.35, filter: "blur(14px)" }
+            ? { opacity: 0, scale: 1.28, filter: "blur(14px)" }
             : { opacity: 1, scale: 1 }
         }
         transition={{ duration: 0.7, ease: [0.76, 0, 0.24, 1] }}
       >
         <motion.p
-          className="font-mono text-[10px] tracking-[0.55em] text-electric-200/70 uppercase"
+          className="font-mono text-[10px] tracking-[0.5em] text-electric-200/70 uppercase"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7 }}
@@ -109,36 +109,31 @@ export function Preloader({ onComplete }: PreloaderProps) {
           {EVENT.host}
         </motion.p>
 
-        <div className="relative">
-          <h1 className="font-display text-6xl leading-[0.85] tracking-[0.06em] text-bone uppercase sm:text-8xl">
-            {Array.from(EVENT.name).map((letter, i) => (
-              <motion.span
-                key={`${letter}-${i}`}
-                className="inline-block"
-                initial={{ opacity: 0, y: 40, rotateX: -90 }}
-                animate={{ opacity: 1, y: 0, rotateX: 0 }}
-                transition={{
-                  duration: 0.8,
-                  delay: 0.1 + i * 0.07,
-                  ease: [0.16, 1, 0.3, 1],
-                }}
-              >
-                {letter}
-              </motion.span>
-            ))}
-          </h1>
-          <span
-            aria-hidden
-            className="font-display absolute inset-0 text-6xl leading-[0.85] tracking-[0.06em] text-cyan-glow/50 uppercase mix-blend-screen blur-[2px] sm:text-8xl"
-            style={{ transform: "translate(3px, -2px)" }}
-          >
-            {EVENT.name}
-          </span>
-        </div>
+        <h1 className="font-display glow-text text-6xl leading-none font-light tracking-[0.02em] text-bone uppercase sm:text-8xl">
+          {Array.from(EVENT.name).map((letter, i) => (
+            <motion.span
+              key={`${letter}-${i}`}
+              className="inline-block"
+              initial={{ opacity: 0, y: 36, filter: "blur(8px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              transition={{
+                duration: 0.9,
+                delay: 0.1 + i * 0.07,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+            >
+              {letter}
+            </motion.span>
+          ))}
+        </h1>
 
         <div className="w-full">
-          <div className="mb-3 flex items-baseline justify-between font-mono text-[10px] tracking-[0.3em] text-bone/45 uppercase">
-            <motion.span key={activeLine} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}>
+          <div className="mb-3 flex items-baseline justify-between font-mono text-[10px] tracking-[0.26em] text-bone/45 uppercase">
+            <motion.span
+              key={activeLine}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+            >
               {BOOT_LINES[activeLine]}
             </motion.span>
             <span className="text-electric-200 tabular-nums">
@@ -146,9 +141,9 @@ export function Preloader({ onComplete }: PreloaderProps) {
             </span>
           </div>
 
-          <div className="relative h-[3px] w-full overflow-hidden rounded-full bg-white/8">
+          <div className="relative h-[2px] w-full overflow-hidden rounded-full bg-white/8">
             <motion.div
-              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-electric-500 via-cyan-glow to-violet-haze"
+              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-electric-500 via-electric-300 to-bone"
               style={{ width: `${displayProgress}%` }}
             />
             <motion.div
@@ -157,9 +152,9 @@ export function Preloader({ onComplete }: PreloaderProps) {
             />
           </div>
 
-          <div className="mt-4 flex justify-between font-mono text-[9px] tracking-[0.3em] text-bone/25 uppercase">
+          <div className="mt-4 flex justify-between font-mono text-[9px] tracking-[0.26em] text-bone/25 uppercase">
             <span>{EVENT.shortDateLabel}</span>
-            <span>{EVENT.timeLabel}</span>
+            <span>{EVENT.venueCity}</span>
           </div>
         </div>
       </motion.div>

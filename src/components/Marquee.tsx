@@ -29,10 +29,10 @@ export function Marquee({ items, reverse, className }: MarqueeProps) {
         {track.map((item, i) => (
           <span
             key={`${item}-${i}`}
-            className="font-display flex items-center gap-9 pr-9 text-lg tracking-[0.14em] text-bone/35 uppercase sm:text-2xl"
+            className="font-display flex items-center gap-9 pr-9 text-lg font-light tracking-[0.08em] text-bone/40 uppercase sm:text-2xl"
           >
             {item}
-            <Asterisk className="size-4 text-electric-400/70" />
+            <Asterisk className="size-3.5 text-electric-400/60" />
           </span>
         ))}
       </div>
