@@ -1,0 +1,67 @@
+import { z } from "zod";
+
+import { MAX_QUANTITY, PASSES, type PassId } from "./passes";
+
+const passIds = PASSES.map((pass) => pass.id) as [PassId, ...PassId[]];
+
+export const nameSchema = z
+  .string()
+  .trim()
+  .min(2, "Put in the name you'll show at the gate")
+  .max(80, "That's longer than a name needs to be");
+
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(160, "That email is too long")
+  .pipe(z.email("That email doesn't look real — your pass goes there"));
+
+export const phoneSchema = z
+  .string()
+  .trim()
+  .max(24, "That's too many digits")
+  .refine((value) => value.replace(/\D/g, "").length >= 10, {
+    message: "We need 10 digits, in case we have to find you",
+  });
+
+export const buyerSchema = z.object({
+  name: nameSchema,
+  email: emailSchema,
+  phone: phoneSchema,
+});
+
+export const orderIntentSchema = buyerSchema.extend({
+  passId: z.enum(passIds),
+  quantity: z.coerce
+    .number()
+    .int()
+    .min(1, "You need at least one pass")
+    .max(MAX_QUANTITY, `Max ${MAX_QUANTITY} passes per order`),
+});
+
+export const confirmCodeSchema = z.object({
+  email: emailSchema,
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "The code is 6 digits"),
+});
+
+export const reserveSchema = orderIntentSchema.extend({
+  verificationToken: z.string().min(10, "Verify your email first"),
+});
+
+export type BuyerInput = z.infer<typeof buyerSchema>;
+export type OrderIntentInput = z.infer<typeof orderIntentSchema>;
+export type ReserveInput = z.infer<typeof reserveSchema>;
+
+/** Flattens a Zod error into `{ field: message }` for inline form display. */
+export function fieldErrors(error: z.ZodError): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const key = issue.path.join(".") || "form";
+    if (!out[key]) out[key] = issue.message;
+  }
+  return out;
+}

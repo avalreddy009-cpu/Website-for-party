@@ -1,19 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
   Copy,
   Loader2,
   Mail,
+  MapPin,
   Minus,
   Phone,
   Plus,
+  RefreshCw,
   ShieldCheck,
-  Sparkles,
   User,
   X,
 } from "lucide-react";
@@ -21,45 +30,51 @@ import {
 import { EVENT, formatPrice } from "@/lib/event";
 import {
   BOOKING_FEE_RATE,
+  MAX_QUANTITY,
   PASSES,
   getPassById,
   type PassId,
   type PassTier,
 } from "@/lib/passes";
+import { priceOrder } from "@/lib/pricing";
+import { useNow } from "@/lib/useNow";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const MAX_QTY = 10;
-
-const STEPS = ["PASS", "DETAILS", "CONFIRM", "DONE"] as const;
+const STEPS = ["PASS", "DETAILS", "VERIFY", "CONFIRM", "DONE"] as const;
 
 type FormState = { name: string; email: string; phone: string };
-type FormErrors = Partial<Record<keyof FormState | "terms", string>>;
+type Errors = Partial<Record<"name" | "email" | "phone" | "code" | "terms" | "form", string>>;
 
 const EMPTY_FORM: FormState = { name: "", email: "", phone: "" };
 
-function generateOrderCode(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const block = (length: number) =>
-    Array.from(
-      { length },
-      () => alphabet[Math.floor(Math.random() * alphabet.length)],
-    ).join("");
-  return `UTP-${block(4)}-${block(4)}`;
-}
+type ApiError = { error?: string; fields?: Record<string, string> };
 
-function validate(form: FormState): FormErrors {
-  const errors: FormErrors = {};
-  if (form.name.trim().length < 2) {
-    errors.name = "Enter the name on your ID";
+async function postJson<T>(url: string, body: unknown): Promise<
+  { ok: true; data: T } | { ok: false; status: number; error: string; fields?: Record<string, string> }
+> {
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = (await response.json().catch(() => ({}))) as T & ApiError;
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: payload.error ?? "Something broke on our end. Try again.",
+        fields: payload.fields,
+      };
+    }
+    return { ok: true, data: payload as T };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      error: "No connection. Check your internet and try again.",
+    };
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) {
-    errors.email = "We send the e-pass here — check the address";
-  }
-  const digits = form.phone.replace(/\D/g, "");
-  if (digits.length < 10) {
-    errors.phone = "Enter a valid 10-digit number";
-  }
-  return errors;
 }
 
 type CheckoutModalProps = {
@@ -70,12 +85,7 @@ type CheckoutModalProps = {
   onClose: () => void;
 };
 
-export function CheckoutModal({
-  open,
-  pass,
-  sessionId,
-  onClose,
-}: CheckoutModalProps) {
+export function CheckoutModal({ open, pass, sessionId, onClose }: CheckoutModalProps) {
   const reduced = useReducedMotion();
   const panelRef = useRef<HTMLDivElement>(null);
   const [locked, setLocked] = useState(false);
@@ -133,7 +143,7 @@ export function CheckoutModal({
             type="button"
             aria-label="Close checkout"
             onClick={requestClose}
-            className="absolute inset-0 cursor-default bg-[#01010a]/80 backdrop-blur-xl"
+            className="absolute inset-0 cursor-default bg-[#01010a]/85 backdrop-blur-xl"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -145,7 +155,7 @@ export function CheckoutModal({
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: reduced ? 0 : 40, opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.55, ease: EASE }}
-            className="glass-strong relative flex max-h-[92svh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl shadow-[0_40px_120px_-40px_rgba(31,91,255,0.85)] sm:max-w-2xl sm:rounded-3xl"
+            className="glass-strong relative flex max-h-[94svh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl shadow-[0_40px_120px_-40px_rgba(96,105,240,0.7)] sm:max-w-2xl sm:rounded-3xl"
           >
             <CheckoutFlow
               key={sessionId}
@@ -165,6 +175,8 @@ export function CheckoutModal({
 /* starts from a clean slate without syncing props into state.         */
 /* ------------------------------------------------------------------ */
 
+type Reservation = { reference: string; total: number; holdExpiresAt: number };
+
 function CheckoutFlow({
   initialPass,
   onClose,
@@ -176,34 +188,36 @@ function CheckoutFlow({
 }) {
   const reduced = useReducedMotion();
   const headingId = useId();
-  const payTimeout = useRef<number | null>(null);
+  const now = useNow();
 
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [tierId, setTierId] = useState<PassId>(initialPass.id);
   const [quantity, setQuantity] = useState(1);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [errors, setErrors] = useState<FormErrors>({});
+  const [errors, setErrors] = useState<Errors>({});
   const [agreed, setAgreed] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [orderCode, setOrderCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const [code, setCode] = useState("");
+  const [devCode, setDevCode] = useState<string | null>(null);
+  const [resendAt, setResendAt] = useState<number | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [reservation, setReservation] = useState<Reservation | null>(null);
   const [copied, setCopied] = useState(false);
 
   const tier = getPassById(tierId);
+  const totals = useMemo(() => priceOrder(tierId, quantity), [tierId, quantity]);
 
-  const totals = useMemo(() => {
-    const subtotal = tier.price * quantity;
-    const fee = Math.round(subtotal * BOOKING_FEE_RATE);
-    return { subtotal, fee, total: subtotal + fee };
-  }, [tier.price, quantity]);
+  const resendIn =
+    resendAt && now ? Math.max(0, Math.ceil((resendAt - now) / 1000)) : 0;
 
-  useEffect(
-    () => () => {
-      if (payTimeout.current !== null) {
-        window.clearTimeout(payTimeout.current);
-      }
+  const setBusyState = useCallback(
+    (value: boolean) => {
+      setBusy(value);
+      onLockChange(value);
     },
-    [],
+    [onLockChange],
   );
 
   const goTo = useCallback(
@@ -214,43 +228,90 @@ function CheckoutFlow({
     [step],
   );
 
-  const handleNext = useCallback(() => {
-    if (step === 0) {
-      goTo(1);
-      return;
-    }
+  /** Details → send the code. */
+  const requestCode = useCallback(
+    async (isResend: boolean) => {
+      setBusyState(true);
+      setErrors({});
+      const result = await postJson<{
+        resendAfterSeconds: number;
+        devCode?: string;
+      }>("/api/passes/verify", { ...form, passId: tierId, quantity });
+      setBusyState(false);
 
-    if (step === 1) {
-      const found = validate(form);
-      setErrors(found);
-      if (Object.keys(found).length > 0) return;
-      goTo(2);
-      return;
-    }
-
-    if (step === 2) {
-      if (!agreed) {
-        setErrors({ terms: "Tick the box so we can let you in" });
+      if (!result.ok) {
+        setErrors({ ...(result.fields as Errors), form: result.fields ? undefined : result.error });
         return;
       }
-      setErrors({});
-      setProcessing(true);
-      onLockChange(true);
-      // Stand-in for the payment round-trip; swap for your PSP call.
-      payTimeout.current = window.setTimeout(() => {
-        setOrderCode(generateOrderCode());
-        setProcessing(false);
-        onLockChange(false);
-        setDirection(1);
-        setStep(3);
-      }, 1800);
-    }
-  }, [agreed, form, goTo, onLockChange, step]);
 
-  const copyCode = async () => {
-    if (!orderCode) return;
+      setDevCode(result.data.devCode ?? null);
+      setResendAt(Date.now() + (result.data.resendAfterSeconds ?? 45) * 1000);
+      setCode("");
+      if (!isResend) goTo(2);
+    },
+    [form, goTo, quantity, setBusyState, tierId],
+  );
+
+  /** Verify → exchange the code for a signed token. */
+  const confirmCode = useCallback(async () => {
+    setBusyState(true);
+    setErrors({});
+    const result = await postJson<{ verificationToken: string }>(
+      "/api/passes/verify/confirm",
+      { email: form.email, code },
+    );
+    setBusyState(false);
+
+    if (!result.ok) {
+      setErrors({ code: result.fields?.code ?? result.error });
+      return;
+    }
+    setToken(result.data.verificationToken);
+    goTo(3);
+  }, [code, form.email, goTo, setBusyState]);
+
+  /** Confirm → create the reservation. */
+  const reserve = useCallback(async () => {
+    if (!agreed) {
+      setErrors({ terms: "Tick the box — it's the boring but important one." });
+      return;
+    }
+    if (!token) {
+      setErrors({ form: "Your verification expired. Go back and resend the code." });
+      return;
+    }
+
+    setBusyState(true);
+    setErrors({});
+    const result = await postJson<Reservation>("/api/passes/reserve", {
+      ...form,
+      passId: tierId,
+      quantity,
+      verificationToken: token,
+    });
+    setBusyState(false);
+
+    if (!result.ok) {
+      setErrors({ form: result.error });
+      return;
+    }
+    setReservation(result.data);
+    setDirection(1);
+    setStep(4);
+  }, [agreed, form, quantity, setBusyState, tierId, token]);
+
+  const handleNext = useCallback(() => {
+    if (busy) return;
+    if (step === 0) return goTo(1);
+    if (step === 1) return void requestCode(false);
+    if (step === 2) return void confirmCode();
+    if (step === 3) return void reserve();
+  }, [busy, confirmCode, goTo, requestCode, reserve, step]);
+
+  const copyReference = async () => {
+    if (!reservation) return;
     try {
-      await navigator.clipboard.writeText(orderCode);
+      await navigator.clipboard.writeText(reservation.reference);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2200);
     } catch {
@@ -258,15 +319,20 @@ function CheckoutFlow({
     }
   };
 
+  const nextLabel = ["CONTINUE", "EMAIL ME A CODE", "VERIFY", "LOCK IT IN"][step];
+  const busyLabel = ["", "SENDING CODE", "CHECKING", "RESERVING"][step];
+  const canAdvance =
+    step !== 2 || code.replace(/\D/g, "").length === 6;
+
   const slide = {
     enter: (dir: number) => ({
-      x: reduced ? 0 : dir * 70,
+      x: reduced ? 0 : dir * 64,
       opacity: 0,
       filter: "blur(8px)",
     }),
     center: { x: 0, opacity: 1, filter: "blur(0px)" },
     exit: (dir: number) => ({
-      x: reduced ? 0 : dir * -70,
+      x: reduced ? 0 : dir * -64,
       opacity: 0,
       filter: "blur(8px)",
     }),
@@ -288,29 +354,29 @@ function CheckoutFlow({
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-32 left-1/2 size-72 -translate-x-1/2 rounded-full blur-3xl animate-glow-pulse"
+        className="animate-glow-pulse pointer-events-none absolute -top-32 left-1/2 size-72 -translate-x-1/2 rounded-full blur-3xl"
         style={{
           background: `radial-gradient(circle, ${tier.accentSoft}, transparent 68%)`,
         }}
       />
-      <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.1] mix-blend-soft-light" />
+      <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.09] mix-blend-soft-light" />
 
-      {/* ------------ header ------------ */}
+      {/* ------------------------------ header ----------------------------- */}
       <div className="relative flex items-start justify-between gap-4 border-b border-white/8 px-6 pt-6 pb-5 sm:px-8">
         <div>
-          <p className="font-mono text-[9px] tracking-[0.34em] text-electric-200/70 uppercase">
-            {EVENT.name} · {EVENT.shortDateLabel} · CHECKOUT
+          <p className="font-mono text-[9px] tracking-[0.3em] text-electric-200/70 uppercase">
+            {EVENT.name} · {EVENT.shortDateLabel} · {EVENT.venueName}
           </p>
           <h2
             id={headingId}
-            className="font-display mt-2 text-2xl leading-none tracking-[0.02em] text-bone uppercase sm:text-3xl"
+            className="font-display mt-2 text-2xl leading-none font-light text-bone sm:text-3xl"
           >
-            {step === 3 ? "YOU'RE IN" : tier.name}
+            {step === 4 ? "You're on the list" : tier.name}
           </h2>
         </div>
         <button
           type="button"
-          onClick={() => !processing && onClose()}
+          onClick={() => !busy && onClose()}
           aria-label="Close checkout"
           className="flex size-9 shrink-0 items-center justify-center rounded-full border border-white/12 text-bone/55 transition-all duration-300 hover:rotate-90 hover:border-bone/40 hover:text-bone"
         >
@@ -318,8 +384,8 @@ function CheckoutFlow({
         </button>
       </div>
 
-      {/* ------------ progress ------------ */}
-      <div className="relative flex gap-2 px-6 pt-5 sm:px-8">
+      {/* ----------------------------- progress ---------------------------- */}
+      <div className="relative flex gap-1.5 px-6 pt-5 sm:gap-2 sm:px-8">
         {STEPS.map((label, i) => (
           <div key={label} className="flex-1">
             <div className="h-[3px] w-full overflow-hidden rounded-full bg-white/8">
@@ -334,8 +400,8 @@ function CheckoutFlow({
               />
             </div>
             <p
-              className={`mt-2 font-mono text-[8px] tracking-[0.22em] uppercase transition-colors duration-500 sm:text-[9px] ${
-                i <= step ? "text-bone/75" : "text-bone/25"
+              className={`mt-2 font-mono text-[7px] tracking-[0.18em] uppercase transition-colors duration-500 sm:text-[9px] ${
+                i <= step ? "text-bone/70" : "text-bone/25"
               }`}
             >
               {label}
@@ -344,7 +410,7 @@ function CheckoutFlow({
         ))}
       </div>
 
-      {/* ------------ body ------------ */}
+      {/* ------------------------------- body ------------------------------ */}
       <div className="relative min-h-0 flex-1 overflow-y-auto px-6 py-7 sm:px-8">
         <AnimatePresence mode="wait" custom={direction} initial={false}>
           <motion.div
@@ -354,7 +420,7 @@ function CheckoutFlow({
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.45, ease: EASE }}
+            transition={{ duration: 0.42, ease: EASE }}
           >
             {step === 0 && (
               <StepPass
@@ -362,7 +428,7 @@ function CheckoutFlow({
                 onTierChange={setTierId}
                 quantity={quantity}
                 onQuantityChange={setQuantity}
-                tier={tier}
+                subtotal={totals.subtotal}
               />
             )}
 
@@ -372,12 +438,30 @@ function CheckoutFlow({
                 errors={errors}
                 onChange={(key, value) => {
                   setForm((prev) => ({ ...prev, [key]: value }));
-                  setErrors((prev) => ({ ...prev, [key]: undefined }));
+                  setErrors((prev) => ({ ...prev, [key]: undefined, form: undefined }));
                 }}
+                onSubmit={handleNext}
               />
             )}
 
             {step === 2 && (
+              <StepVerify
+                email={form.email}
+                code={code}
+                error={errors.code}
+                devCode={devCode}
+                resendIn={resendIn}
+                busy={busy}
+                onCodeChange={(value) => {
+                  setCode(value);
+                  setErrors((prev) => ({ ...prev, code: undefined }));
+                }}
+                onComplete={handleNext}
+                onResend={() => void requestCode(true)}
+              />
+            )}
+
+            {step === 3 && (
               <StepConfirm
                 tier={tier}
                 quantity={quantity}
@@ -392,34 +476,48 @@ function CheckoutFlow({
               />
             )}
 
-            {step === 3 && orderCode && (
+            {step === 4 && reservation && (
               <StepDone
                 tier={tier}
                 quantity={quantity}
                 form={form}
-                total={totals.total}
-                orderCode={orderCode}
+                reservation={reservation}
+                now={now}
                 copied={copied}
-                onCopy={copyCode}
+                onCopy={copyReference}
               />
             )}
           </motion.div>
         </AnimatePresence>
+
+        <AnimatePresence>
+          {errors.form && (
+            <motion.p
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mt-5 flex items-start gap-2.5 rounded-xl border border-signal/35 bg-signal/8 px-4 py-3 text-[12px] leading-relaxed text-signal-soft"
+            >
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              {errors.form}
+            </motion.p>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* ------------ footer ------------ */}
+      {/* ------------------------------ footer ----------------------------- */}
       <div className="relative border-t border-white/8 bg-black/25 px-6 py-5 sm:px-8">
-        {step < 3 ? (
+        {step < 4 ? (
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="font-mono text-[8px] tracking-[0.26em] text-bone/35 uppercase">
+              <p className="font-mono text-[8px] tracking-[0.24em] text-bone/35 uppercase">
                 {quantity} × {tier.name}
               </p>
               <motion.p
                 key={totals.total}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="font-display text-2xl leading-none text-bone tabular-nums sm:text-3xl"
+                className="font-display text-2xl leading-none font-light text-bone tabular-nums sm:text-3xl"
               >
                 {formatPrice(totals.total)}
               </motion.p>
@@ -430,7 +528,7 @@ function CheckoutFlow({
                 <button
                   type="button"
                   onClick={() => goTo(step - 1)}
-                  disabled={processing}
+                  disabled={busy}
                   className="flex size-11 items-center justify-center rounded-full border border-white/12 text-bone/60 transition-all duration-300 hover:border-bone/40 hover:text-bone disabled:opacity-40"
                   aria-label="Previous step"
                 >
@@ -441,24 +539,24 @@ function CheckoutFlow({
               <button
                 type="button"
                 onClick={handleNext}
-                disabled={processing}
-                className="group relative flex items-center gap-2.5 overflow-hidden rounded-full bg-bone px-6 py-3.5 font-mono text-[10px] font-bold tracking-[0.22em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] disabled:scale-100 disabled:opacity-70 sm:px-8"
+                disabled={busy || !canAdvance}
+                className="group relative flex items-center gap-2.5 overflow-hidden rounded-full bg-bone px-6 py-3.5 font-mono text-[10px] font-bold tracking-[0.2em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] disabled:scale-100 disabled:opacity-50 sm:px-7"
               >
                 <span
-                  className="absolute inset-0 translate-y-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-y-0"
+                  className="absolute inset-0 translate-y-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-y-0 group-disabled:translate-y-full"
                   style={{
-                    background: `linear-gradient(135deg, ${tier.accent}, #6b3bff)`,
+                    background: `linear-gradient(135deg, ${tier.accent}, #5b4bff)`,
                   }}
                 />
-                <span className="relative flex items-center gap-2.5 transition-colors duration-300 group-hover:text-bone">
-                  {processing ? (
+                <span className="relative flex items-center gap-2.5 transition-colors duration-300 group-hover:text-bone group-disabled:text-void">
+                  {busy ? (
                     <>
                       <Loader2 className="size-3.5 animate-spin" />
-                      LOCKING PASSES
+                      {busyLabel}
                     </>
                   ) : (
                     <>
-                      {step === 2 ? "CONFIRM & PAY" : "CONTINUE"}
+                      {nextLabel}
                       <ArrowRight className="size-3.5" />
                     </>
                   )}
@@ -468,15 +566,21 @@ function CheckoutFlow({
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-            <p className="font-mono text-[8px] tracking-[0.24em] text-bone/40 uppercase">
-              E-PASS SENT TO {form.email || "YOUR INBOX"}
-            </p>
+            <a
+              href={EVENT.mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 font-mono text-[9px] tracking-[0.2em] text-bone/50 uppercase transition-colors hover:text-electric-200"
+            >
+              <MapPin className="size-3.5" />
+              {EVENT.venueName}
+            </a>
             <button
               type="button"
               onClick={onClose}
-              className="w-full rounded-full border border-white/15 px-7 py-3.5 font-mono text-[10px] font-bold tracking-[0.22em] text-bone/80 uppercase transition-all duration-300 hover:border-cyan-glow/60 hover:text-cyan-glow sm:w-auto"
+              className="w-full rounded-full border border-white/15 px-7 py-3.5 font-mono text-[10px] font-bold tracking-[0.2em] text-bone/80 uppercase transition-all duration-300 hover:border-electric-300/60 hover:text-electric-200 sm:w-auto"
             >
-              BACK TO UTOPIA
+              DONE
             </button>
           </div>
         )}
@@ -484,7 +588,6 @@ function CheckoutFlow({
     </div>
   );
 }
-
 
 /* ------------------------------------------------------------------ */
 /* Step 1 — pass + quantity                                            */
@@ -495,21 +598,21 @@ function StepPass({
   onTierChange,
   quantity,
   onQuantityChange,
-  tier,
+  subtotal,
 }: {
   tierId: PassId;
   onTierChange: (id: PassId) => void;
   quantity: number;
   onQuantityChange: (qty: number) => void;
-  tier: PassTier;
+  subtotal: number;
 }) {
   return (
     <div className="space-y-8">
       <div>
         <StepTitle
           eyebrow="STEP 01"
-          title="LOCK YOUR TIER"
-          hint="Switch tiers here if you changed your mind."
+          title="Which one?"
+          hint="Change your mind here, it's free."
         />
         <div className="mt-5 grid gap-2.5">
           {PASSES.map((option) => {
@@ -519,14 +622,14 @@ function StepPass({
                 key={option.id}
                 type="button"
                 onClick={() => onTierChange(option.id)}
-                className="group relative flex items-center justify-between gap-4 overflow-hidden rounded-2xl border px-4 py-3.5 text-left transition-all duration-300"
+                aria-pressed={active}
+                className="group relative flex items-center justify-between gap-4 overflow-hidden rounded-2xl border px-4 py-4 text-left transition-all duration-300"
                 style={{
                   borderColor: active ? option.accentSoft : "rgba(255,255,255,0.09)",
                   background: active
-                    ? "rgba(255,255,255,0.055)"
+                    ? "rgba(255,255,255,0.05)"
                     : "rgba(255,255,255,0.015)",
                 }}
-                aria-pressed={active}
               >
                 {active && (
                   <motion.span
@@ -534,7 +637,7 @@ function StepPass({
                     className="absolute inset-0"
                     style={{
                       background: `linear-gradient(110deg, ${option.accentSoft}, transparent 62%)`,
-                      opacity: 0.34,
+                      opacity: 0.3,
                     }}
                     transition={{ duration: 0.5, ease: EASE }}
                   />
@@ -547,20 +650,18 @@ function StepPass({
                       background: active ? option.accent : "transparent",
                     }}
                   >
-                    {active && (
-                      <Check className="size-3 text-void" strokeWidth={3.5} />
-                    )}
+                    {active && <Check className="size-3 text-void" strokeWidth={3.5} />}
                   </span>
                   <span>
-                    <span className="font-display block text-base tracking-[0.03em] text-bone uppercase sm:text-lg">
+                    <span className="font-display block text-lg leading-tight text-bone">
                       {option.name}
                     </span>
-                    <span className="font-mono text-[8px] tracking-[0.24em] text-bone/40 uppercase">
+                    <span className="font-mono text-[8px] tracking-[0.22em] text-bone/40 uppercase">
                       {option.subtitle}
                     </span>
                   </span>
                 </span>
-                <span className="relative font-display text-lg text-bone tabular-nums sm:text-xl">
+                <span className="font-display relative text-xl font-light text-bone tabular-nums">
                   {formatPrice(option.price)}
                 </span>
               </button>
@@ -572,8 +673,8 @@ function StepPass({
       <div>
         <StepTitle
           eyebrow="STEP 01B"
-          title="HOW MANY?"
-          hint={`Max ${MAX_QTY} passes per order.`}
+          title="How many of you?"
+          hint={`Up to ${MAX_QUANTITY} per order. Bigger group? Email us.`}
         />
 
         <div className="mt-5 flex items-center justify-between gap-5 rounded-2xl border border-white/9 bg-white/2 px-5 py-4">
@@ -594,7 +695,7 @@ function StepPass({
                   animate={{ y: 0, opacity: 1 }}
                   exit={{ y: -22, opacity: 0 }}
                   transition={{ duration: 0.28, ease: EASE }}
-                  className="font-display text-4xl leading-none text-bone tabular-nums"
+                  className="font-display text-4xl leading-none font-light text-bone tabular-nums"
                 >
                   {String(quantity).padStart(2, "0")}
                 </motion.span>
@@ -603,19 +704,19 @@ function StepPass({
 
             <QtyButton
               label="Increase quantity"
-              disabled={quantity >= MAX_QTY}
-              onClick={() => onQuantityChange(Math.min(MAX_QTY, quantity + 1))}
+              disabled={quantity >= MAX_QUANTITY}
+              onClick={() => onQuantityChange(Math.min(MAX_QUANTITY, quantity + 1))}
             >
               <Plus className="size-4" />
             </QtyButton>
           </div>
 
           <div className="text-right">
-            <p className="font-mono text-[8px] tracking-[0.24em] text-bone/35 uppercase">
+            <p className="font-mono text-[8px] tracking-[0.22em] text-bone/35 uppercase">
               SUBTOTAL
             </p>
-            <p className="font-display text-xl text-bone tabular-nums sm:text-2xl">
-              {formatPrice(tier.price * quantity)}
+            <p className="font-display text-xl font-light text-bone tabular-nums sm:text-2xl">
+              {formatPrice(subtotal)}
             </p>
           </div>
         </div>
@@ -642,7 +743,7 @@ function QtyButton({
       disabled={disabled}
       aria-label={label}
       whileTap={disabled ? undefined : { scale: 0.88 }}
-      className="flex size-10 items-center justify-center rounded-full border border-white/14 text-bone/75 transition-all duration-300 hover:border-cyan-glow/60 hover:text-cyan-glow disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-white/14 disabled:hover:text-bone/75"
+      className="flex size-10 items-center justify-center rounded-full border border-white/14 text-bone/75 transition-all duration-300 hover:border-electric-300/60 hover:text-electric-200 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-white/14 disabled:hover:text-bone/75"
     >
       {children}
     </motion.button>
@@ -657,10 +758,12 @@ function StepDetails({
   form,
   errors,
   onChange,
+  onSubmit,
 }: {
   form: FormState;
-  errors: FormErrors;
+  errors: Errors;
   onChange: (key: keyof FormState, value: string) => void;
+  onSubmit: () => void;
 }) {
   const firstRef = useRef<HTMLInputElement>(null);
 
@@ -670,11 +773,18 @@ function StepDetails({
   }, []);
 
   return (
-    <div>
+    <div
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onSubmit();
+        }
+      }}
+    >
       <StepTitle
         eyebrow="STEP 02"
-        title="WHO'S COMING IN?"
-        hint="This has to match the ID you bring to the gate."
+        title="Who's coming in?"
+        hint="Name has to match whatever ID you bring."
       />
 
       <div className="mt-6 space-y-5">
@@ -682,7 +792,7 @@ function StepDetails({
           ref={firstRef}
           icon={User}
           label="FULL NAME"
-          placeholder="As printed on your ID"
+          placeholder="The name on your ID"
           value={form.name}
           error={errors.name}
           autoComplete="name"
@@ -702,7 +812,7 @@ function StepDetails({
           icon={Phone}
           label="PHONE"
           type="tel"
-          placeholder="+91 00000 00000"
+          placeholder="98765 43210"
           value={form.phone}
           error={errors.phone}
           autoComplete="tel"
@@ -711,10 +821,11 @@ function StepDetails({
       </div>
 
       <div className="mt-7 flex items-start gap-3 rounded-2xl border border-electric-300/15 bg-electric-500/6 px-4 py-3.5">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-cyan-glow" />
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-electric-300" />
         <p className="text-[11px] leading-relaxed text-bone/55">
-          Your details are used only to issue the e-pass and to send the venue
-          drop 24 hours before doors. No lists, no resale.
+          We email you a 6-digit code next — that&apos;s how we know the address
+          is real and your pass actually reaches you. No newsletters, no resale,
+          no forwarding your number to anyone.
         </p>
       </div>
     </div>
@@ -747,7 +858,7 @@ function Field({
 
   return (
     <label className="block">
-      <span className="mb-2 flex items-center justify-between font-mono text-[9px] tracking-[0.3em] text-bone/40 uppercase">
+      <span className="mb-2 flex items-center justify-between gap-3 font-mono text-[9px] tracking-[0.28em] text-bone/40 uppercase">
         {label}
         <AnimatePresence>
           {error && (
@@ -755,7 +866,7 @@ function Field({
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="text-[8px] tracking-[0.14em] text-rose-300/90 normal-case"
+              className="text-right text-[9px] tracking-normal text-signal-soft normal-case"
             >
               {error}
             </motion.span>
@@ -769,17 +880,17 @@ function Field({
         className="relative flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition-colors duration-300"
         style={{
           borderColor: error
-            ? "rgba(255,113,145,0.55)"
+            ? "rgba(255,59,59,0.6)"
             : focused
-              ? "rgba(85,230,255,0.6)"
+              ? "rgba(154,164,255,0.65)"
               : "rgba(255,255,255,0.1)",
           background: focused ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.02)",
-          boxShadow: focused ? "0 0 32px -12px rgba(85,230,255,0.7)" : "none",
+          boxShadow: focused ? "0 0 32px -12px rgba(154,164,255,0.75)" : "none",
         }}
       >
         <Icon
           className={`size-4 shrink-0 transition-colors duration-300 ${
-            focused ? "text-cyan-glow" : "text-bone/35"
+            focused ? "text-electric-200" : "text-bone/35"
           }`}
         />
         <input
@@ -799,7 +910,154 @@ function Field({
 }
 
 /* ------------------------------------------------------------------ */
-/* Step 3 — confirm                                                    */
+/* Step 3 — email verification                                         */
+/* ------------------------------------------------------------------ */
+
+function StepVerify({
+  email,
+  code,
+  error,
+  devCode,
+  resendIn,
+  busy,
+  onCodeChange,
+  onComplete,
+  onResend,
+}: {
+  email: string;
+  code: string;
+  error?: string;
+  devCode: string | null;
+  resendIn: number;
+  busy: boolean;
+  onCodeChange: (value: string) => void;
+  onComplete: () => void;
+  onResend: () => void;
+}) {
+  const boxes = useRef<(HTMLInputElement | null)[]>([]);
+  const digits = code.padEnd(6, " ").slice(0, 6).split("");
+
+  useEffect(() => {
+    const id = window.setTimeout(() => boxes.current[0]?.focus(), 340);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  const write = (next: string) => {
+    const clean = next.replace(/\D/g, "").slice(0, 6);
+    onCodeChange(clean);
+    const focusIndex = Math.min(clean.length, 5);
+    boxes.current[focusIndex]?.focus();
+    if (clean.length === 6) window.setTimeout(onComplete, 120);
+  };
+
+  return (
+    <div>
+      <StepTitle
+        eyebrow="STEP 03"
+        title="Check your inbox"
+        hint="Six digits, ten minutes, then it's dead."
+      />
+
+      <p className="mt-5 text-[13px] leading-relaxed text-bone/60">
+        Sent to <span className="text-bone/90">{email}</span>. If it&apos;s not
+        there in a minute, look in spam — that&apos;s where the good things go.
+      </p>
+
+      <motion.div
+        animate={error ? { x: [0, -8, 7, -4, 0] } : { x: 0 }}
+        transition={{ duration: 0.42 }}
+        className="mt-7 flex items-center justify-between gap-2 sm:gap-3"
+      >
+        {digits.map((digit, i) => (
+          <input
+            key={i}
+            ref={(element) => {
+              boxes.current[i] = element;
+            }}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            aria-label={`Digit ${i + 1} of 6`}
+            maxLength={6}
+            value={digit.trim()}
+            onChange={(event) => {
+              const raw = event.target.value.replace(/\D/g, "");
+              if (raw.length > 1) {
+                write(raw);
+                return;
+              }
+              const chars = code.padEnd(6, " ").split("");
+              chars[i] = raw || " ";
+              write(chars.join("").replace(/ /g, ""));
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Backspace" && !digit.trim() && i > 0) {
+                boxes.current[i - 1]?.focus();
+              }
+              if (event.key === "ArrowLeft" && i > 0) boxes.current[i - 1]?.focus();
+              if (event.key === "ArrowRight" && i < 5) boxes.current[i + 1]?.focus();
+              if (event.key === "Enter" && code.length === 6) onComplete();
+            }}
+            onPaste={(event) => {
+              event.preventDefault();
+              write(event.clipboardData.getData("text"));
+            }}
+            className="font-display h-16 w-full rounded-2xl border text-center text-3xl font-light text-bone tabular-nums transition-all duration-300 focus:outline-none sm:h-20 sm:text-4xl"
+            style={{
+              borderColor: error
+                ? "rgba(255,59,59,0.6)"
+                : digit.trim()
+                  ? "rgba(154,164,255,0.55)"
+                  : "rgba(255,255,255,0.12)",
+              background: digit.trim()
+                ? "rgba(154,164,255,0.07)"
+                : "rgba(255,255,255,0.02)",
+            }}
+          />
+        ))}
+      </motion.div>
+
+      <AnimatePresence>
+        {error && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mt-3 text-center text-[12px] text-signal-soft"
+          >
+            {error}
+          </motion.p>
+        )}
+      </AnimatePresence>
+
+      <div className="mt-6 flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={onResend}
+          disabled={resendIn > 0 || busy}
+          className="flex items-center gap-2 font-mono text-[9px] tracking-[0.22em] text-bone/45 uppercase transition-colors duration-300 hover:text-electric-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-bone/45"
+        >
+          <RefreshCw className={`size-3.5 ${busy ? "animate-spin" : ""}`} />
+          {resendIn > 0 ? `RESEND IN ${resendIn}S` : "SEND IT AGAIN"}
+        </button>
+
+        {devCode && (
+          <p className="rounded-xl border border-electric-300/25 bg-electric-500/8 px-4 py-2.5 text-center text-[11px] leading-relaxed text-electric-100">
+            <span className="font-mono tracking-[0.2em] uppercase">
+              Dev mode
+            </span>{" "}
+            — no mail credentials configured, so here&apos;s the code:{" "}
+            <span className="font-mono text-base tracking-[0.28em] text-bone">
+              {devCode}
+            </span>
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Step 4 — confirm                                                    */
 /* ------------------------------------------------------------------ */
 
 function StepConfirm({
@@ -820,32 +1078,33 @@ function StepConfirm({
   onAgreedChange: (value: boolean) => void;
 }) {
   const rows = [
-    { label: "PASS", value: `${tier.name} · ${tier.subtitle}` },
-    { label: "QUANTITY", value: `${quantity} PASS${quantity > 1 ? "ES" : ""}` },
+    { label: "PASS", value: `${tier.name} — ${tier.subtitle}` },
+    { label: "QUANTITY", value: `${quantity} ${quantity > 1 ? "passes" : "pass"}` },
     { label: "NAME", value: form.name },
     { label: "EMAIL", value: form.email },
     { label: "PHONE", value: form.phone },
     { label: "WHEN", value: `${EVENT.dateLabel} · ${EVENT.timeLabel}` },
+    { label: "WHERE", value: `${EVENT.venueName}, ${EVENT.venueCity}` },
   ];
 
   return (
     <div>
       <StepTitle
-        eyebrow="STEP 03"
-        title="ONE LAST LOOK"
-        hint="Nothing is charged until you hit confirm."
+        eyebrow="STEP 04"
+        title="Last look"
+        hint="Nothing is charged here. We reserve first, you pay after."
       />
 
       <div className="mt-6 divide-y divide-white/7 overflow-hidden rounded-2xl border border-white/9 bg-white/2">
         {rows.map((row, i) => (
           <motion.div
             key={row.label}
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: i * 0.055, ease: EASE }}
+            transition={{ duration: 0.42, delay: i * 0.05, ease: EASE }}
             className="flex items-baseline justify-between gap-4 px-4 py-3"
           >
-            <span className="font-mono text-[8px] tracking-[0.26em] text-bone/35 uppercase">
+            <span className="font-mono text-[8px] tracking-[0.24em] text-bone/35 uppercase">
               {row.label}
             </span>
             <span className="truncate text-right text-[13px] text-bone/85">
@@ -863,11 +1122,11 @@ function StepConfirm({
         />
         <div className="my-1 h-px bg-white/8" />
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[9px] tracking-[0.3em] text-bone/60 uppercase">
+          <span className="font-mono text-[9px] tracking-[0.28em] text-bone/60 uppercase">
             TOTAL
           </span>
           <span
-            className="font-display text-2xl tabular-nums"
+            className="font-display text-2xl font-light tabular-nums"
             style={{ color: tier.accent }}
           >
             {formatPrice(totals.total)}
@@ -887,7 +1146,7 @@ function StepConfirm({
           className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors duration-300"
           style={{
             borderColor: error
-              ? "rgba(255,113,145,0.7)"
+              ? "rgba(255,59,59,0.7)"
               : agreed
                 ? tier.accent
                 : "rgba(255,255,255,0.22)",
@@ -907,9 +1166,10 @@ function StepConfirm({
           </AnimatePresence>
         </motion.span>
         <span className="text-[11px] leading-relaxed text-bone/55">
-          I&apos;m 21+, I&apos;ll bring a valid ID, and I accept that passes are
-          non-refundable.{" "}
-          {error && <span className="text-rose-300/90">{error}</span>}
+          I&apos;m bringing an ID, I know passes aren&apos;t refundable, and I
+          understand this is a completely dry event — no alcohol in, none served,
+          bags get checked.{" "}
+          {error && <span className="text-signal-soft">{error}</span>}
         </span>
       </button>
     </div>
@@ -919,7 +1179,7 @@ function StepConfirm({
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="font-mono text-[8px] tracking-[0.26em] text-bone/35 uppercase">
+      <span className="font-mono text-[8px] tracking-[0.24em] text-bone/35 uppercase">
         {label}
       </span>
       <span className="text-[13px] text-bone/70 tabular-nums">{value}</span>
@@ -928,26 +1188,30 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Step 4 — success                                                    */
+/* Step 5 — reserved                                                   */
 /* ------------------------------------------------------------------ */
 
 function StepDone({
   tier,
   quantity,
   form,
-  total,
-  orderCode,
+  reservation,
+  now,
   copied,
   onCopy,
 }: {
   tier: PassTier;
   quantity: number;
   form: FormState;
-  total: number;
-  orderCode: string;
+  reservation: Reservation;
+  now: number;
   copied: boolean;
   onCopy: () => void;
 }) {
+  const minutesLeft = now
+    ? Math.max(0, Math.ceil((reservation.holdExpiresAt - now) / 60000))
+    : EVENT.holdMinutes;
+
   return (
     <div className="flex flex-col items-center text-center">
       <motion.div
@@ -955,7 +1219,9 @@ function StepDone({
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.7, ease: EASE }}
         className="relative flex size-20 items-center justify-center rounded-full"
-        style={{ background: `radial-gradient(circle, ${tier.accentSoft}, transparent 70%)` }}
+        style={{
+          background: `radial-gradient(circle, ${tier.accentSoft}, transparent 70%)`,
+        }}
       >
         <motion.span
           className="absolute inset-0 rounded-full border"
@@ -967,7 +1233,7 @@ function StepDone({
           className="flex size-12 items-center justify-center rounded-full"
           style={{ background: tier.accent }}
         >
-          <Check className="size-6 text-void" strokeWidth={3.5} />
+          <Check className="size-6 text-void" strokeWidth={3} />
         </span>
       </motion.div>
 
@@ -975,9 +1241,9 @@ function StepDone({
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.15, ease: EASE }}
-        className="font-display mt-6 text-3xl leading-none tracking-[0.02em] text-bone uppercase sm:text-4xl"
+        className="font-display mt-6 text-3xl leading-tight font-light text-bone sm:text-4xl"
       >
-        SEE YOU IN UTOPIA
+        See you Sunday
       </motion.h3>
 
       <motion.p
@@ -986,17 +1252,17 @@ function StepDone({
         transition={{ duration: 0.6, delay: 0.3 }}
         className="mt-3 max-w-sm text-sm leading-relaxed text-bone/55"
       >
-        {quantity} × {tier.name} secured for {form.name.split(" ")[0] || "you"}.
-        The e-pass is on its way to{" "}
-        <span className="text-bone/85">{form.email}</span>.
+        {quantity} × {tier.name} held for{" "}
+        {form.name.split(" ")[0] || "you"}. The receipt is already in{" "}
+        <span className="text-bone/85">{form.email}</span>, and the payment link
+        follows there too.
       </motion.p>
 
-      {/* Ticket stub */}
       <motion.div
-        initial={{ opacity: 0, y: 26 }}
+        initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, delay: 0.4, ease: EASE }}
-        className="relative mt-8 w-full overflow-hidden rounded-2xl border border-white/10 bg-[#04060f]/80 text-left"
+        className="relative mt-8 w-full overflow-hidden rounded-2xl border border-white/10 bg-[#04050e]/80 text-left"
       >
         <div
           aria-hidden
@@ -1007,17 +1273,17 @@ function StepDone({
         />
         <div className="flex items-stretch">
           <div className="flex-1 p-5">
-            <p className="font-mono text-[8px] tracking-[0.3em] text-bone/35 uppercase">
-              ORDER REFERENCE
+            <p className="font-mono text-[8px] tracking-[0.28em] text-bone/35 uppercase">
+              YOUR REFERENCE
             </p>
-            <p className="font-display mt-2 text-2xl tracking-[0.1em] text-bone sm:text-3xl">
-              {orderCode}
+            <p className="font-display mt-2 text-2xl tracking-[0.08em] text-bone sm:text-3xl">
+              {reservation.reference}
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <StubCell label="DATE" value={EVENT.shortDateLabel} />
-              <StubCell label="TIME" value="12:00 PM" />
-              <StubCell label="TIER" value={tier.subtitle} />
-              <StubCell label="PAID" value={formatPrice(total)} />
+              <StubCell label="DATE" value="SUN 27 SEP" />
+              <StubCell label="DOORS" value="12:00 PM" />
+              <StubCell label="PASS" value={tier.name} />
+              <StubCell label="TOTAL" value={formatPrice(reservation.total)} />
             </div>
           </div>
 
@@ -1025,32 +1291,23 @@ function StepDone({
             className="relative w-px"
             style={{
               backgroundImage:
-                "repeating-linear-gradient(to bottom, rgba(255,255,255,0.28) 0 6px, transparent 6px 12px)",
+                "repeating-linear-gradient(to bottom, rgba(255,255,255,0.26) 0 6px, transparent 6px 12px)",
             }}
           />
 
-          <div className="flex w-24 flex-col items-center justify-center gap-2 p-4 sm:w-28">
-            <Sparkles className="size-4" style={{ color: tier.accent }} />
-            <p className="font-mono text-[8px] tracking-[0.22em] text-bone/40 uppercase">
-              VALID
+          <div className="flex w-24 flex-col items-center justify-center gap-2 p-4 text-center sm:w-28">
+            <p className="font-mono text-[8px] tracking-[0.2em] text-bone/40 uppercase">
+              HOLD
             </p>
-            <div className="flex h-10 items-end gap-[3px]">
-              {[6, 10, 4, 9, 7, 3, 10, 5].map((h, i) => (
-                <motion.span
-                  key={i}
-                  className="w-[3px] rounded-full"
-                  style={{ background: tier.accent, opacity: 0.75 }}
-                  initial={{ height: 4 }}
-                  animate={{ height: [4, h * 3.6, 4] }}
-                  transition={{
-                    duration: 1.4,
-                    repeat: Infinity,
-                    delay: i * 0.09,
-                    ease: "easeInOut",
-                  }}
-                />
-              ))}
-            </div>
+            <p
+              className="font-display text-3xl leading-none font-light"
+              style={{ color: tier.accent }}
+            >
+              {minutesLeft}
+            </p>
+            <p className="font-mono text-[8px] tracking-[0.2em] text-bone/40 uppercase">
+              MIN LEFT
+            </p>
           </div>
         </div>
       </motion.div>
@@ -1061,10 +1318,10 @@ function StepDone({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.6 }}
-        className="mt-5 flex items-center gap-2 font-mono text-[9px] tracking-[0.26em] text-bone/45 uppercase transition-colors duration-300 hover:text-cyan-glow"
+        className="mt-5 flex items-center gap-2 font-mono text-[9px] tracking-[0.24em] text-bone/45 uppercase transition-colors duration-300 hover:text-electric-200"
       >
         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-        {copied ? "REFERENCE COPIED" : "COPY REFERENCE"}
+        {copied ? "COPIED" : "COPY REFERENCE"}
       </motion.button>
     </div>
   );
@@ -1073,7 +1330,7 @@ function StepDone({
 function StubCell({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="font-mono text-[8px] tracking-[0.24em] text-bone/30 uppercase">
+      <p className="font-mono text-[8px] tracking-[0.22em] text-bone/30 uppercase">
         {label}
       </p>
       <p className="mt-1 text-[12px] text-bone/80 uppercase">{value}</p>
@@ -1094,10 +1351,10 @@ function StepTitle({
 }) {
   return (
     <div>
-      <p className="font-mono text-[9px] tracking-[0.34em] text-electric-200/70 uppercase">
+      <p className="font-mono text-[9px] tracking-[0.3em] text-electric-200/70 uppercase">
         {eyebrow}
       </p>
-      <h3 className="font-display mt-2 text-xl leading-none tracking-[0.02em] text-bone uppercase sm:text-2xl">
+      <h3 className="font-display mt-2 text-2xl leading-tight font-light text-bone">
         {title}
       </h3>
       <p className="mt-2 text-xs text-bone/45">{hint}</p>
