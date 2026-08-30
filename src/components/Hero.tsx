@@ -1,25 +1,20 @@
 "use client";
 
 import { useRef } from "react";
+import Image from "next/image";
 import {
   motion,
   useReducedMotion,
   useScroll,
   useTransform,
 } from "framer-motion";
-import { ArrowDown, Clock, Compass, Ticket } from "lucide-react";
+import { ArrowDown, MapPin, Ticket } from "lucide-react";
 
 import { EVENT } from "@/lib/event";
 import { NeonButton } from "./ui/NeonButton";
 import { SplitText } from "./ui/Reveal";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-
-const META = [
-  { icon: Compass, label: EVENT.dateLabel },
-  { icon: Clock, label: EVENT.timeLabel },
-  { icon: Ticket, label: EVENT.venueTeaser },
-];
 
 type HeroProps = {
   ready: boolean;
@@ -33,159 +28,183 @@ export function Hero({ ready }: HeroProps) {
     offset: ["start start", "end start"],
   });
 
-  const contentY = useTransform(scrollYProgress, [0, 1], ["0%", "34%"]);
-  const contentOpacity = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
-  const contentBlur = useTransform(
-    scrollYProgress,
-    [0, 1],
-    ["blur(0px)", "blur(8px)"],
-  );
+  const contentY = useTransform(scrollYProgress, [0, 1], ["0%", "26%"]);
+  const contentOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
+  const posterY = useTransform(scrollYProgress, [0, 1], ["0%", "-14%"]);
 
   return (
     <section
       id="top"
       ref={sectionRef}
-      className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden px-5 pt-28 pb-20 sm:px-8"
+      className="relative flex min-h-[100svh] items-center overflow-hidden px-5 pt-32 pb-24 sm:px-8 lg:pt-28"
     >
-      <motion.div
-        style={
-          reduced
-            ? undefined
-            : { y: contentY, opacity: contentOpacity, filter: contentBlur }
-        }
-        className="relative z-10 flex w-full max-w-6xl flex-col items-center text-center"
-      >
+      {/* Real crowd footage from the teaser, graded down to room tone. */}
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <Image
+          src="/media/crowd-blue.jpg"
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="film object-cover object-center opacity-55"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#030307] via-[#030307]/55 to-[#030307]" />
+        <div className="absolute inset-0 bg-[radial-gradient(70%_60%_at_50%_50%,transparent,rgba(3,3,7,0.85))]" />
+      </div>
+
+      <div className="relative z-10 mx-auto grid w-full max-w-7xl items-center gap-14 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16">
         <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={ready ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.9, delay: 0.15, ease: EASE }}
-          className="glass mb-8 flex items-center gap-3 rounded-full px-4 py-2"
+          style={
+            reduced ? undefined : { y: contentY, opacity: contentOpacity }
+          }
+          className="flex flex-col items-center text-center lg:items-start lg:text-left"
         >
-          <span className="relative flex size-1.5">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-cyan-glow opacity-75" />
-            <span className="relative inline-flex size-1.5 rounded-full bg-cyan-glow" />
-          </span>
-          <span className="font-mono text-[9px] tracking-[0.4em] text-bone/70 uppercase sm:text-[10px]">
-            {EVENT.host} PRESENTS
-          </span>
-        </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={ready ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.9, delay: 0.15, ease: EASE }}
+            className="glass flex items-center gap-3 rounded-full px-4 py-2"
+          >
+            <span className="relative flex size-1.5">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-electric-300 opacity-70" />
+              <span className="relative inline-flex size-1.5 rounded-full bg-electric-300" />
+            </span>
+            <span className="font-mono text-[9px] tracking-[0.34em] text-bone/70 uppercase sm:text-[10px]">
+              {EVENT.host} · CHAPTER 01
+            </span>
+          </motion.div>
 
-        <h1 className="relative select-none">
-          <span className="sr-only">
-            {EVENT.name} by {EVENT.host}
-          </span>
-
-          <span className="relative block">
-            {/* Chromatic ghost layers behind the headline for a mis-registered print feel. */}
-            <motion.span
-              aria-hidden
-              className="font-display absolute inset-0 text-[19vw] leading-[0.78] tracking-[-0.01em] text-electric-500/55 uppercase mix-blend-screen blur-[3px] sm:text-[15rem] lg:text-[19rem]"
-              animate={
-                reduced || !ready
-                  ? {}
-                  : { x: [-7, 5, -4], y: [4, -3, 5], opacity: [0.45, 0.7, 0.45] }
-              }
-              transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-            >
-              {EVENT.name}
-            </motion.span>
-            <motion.span
-              aria-hidden
-              className="font-display absolute inset-0 text-[19vw] leading-[0.78] tracking-[-0.01em] text-cyan-glow/45 uppercase mix-blend-screen blur-[5px] sm:text-[15rem] lg:text-[19rem]"
-              animate={
-                reduced || !ready
-                  ? {}
-                  : { x: [6, -5, 7], y: [-5, 4, -3], opacity: [0.35, 0.6, 0.35] }
-              }
-              transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut" }}
-            >
-              {EVENT.name}
-            </motion.span>
-
-            <span className="font-display relative block text-[19vw] leading-[0.78] tracking-[-0.01em] text-bone uppercase glow-text sm:text-[15rem] lg:text-[19rem]">
+          <h1 className="mt-8">
+            <span className="sr-only">
+              {EVENT.name} by {EVENT.host} — {EVENT.tagline}
+            </span>
+            <span className="font-display glow-text block text-[22vw] leading-[0.82] font-light tracking-[-0.015em] text-bone uppercase sm:text-[13rem] lg:text-[11rem] xl:text-[13rem]">
               {ready ? (
                 <SplitText
                   text={EVENT.name}
                   animateOnMount
                   delay={0.2}
-                  stagger={0.07}
+                  stagger={0.075}
                   lineClassName="pb-[0.06em]"
                 />
               ) : (
                 <span className="opacity-0">{EVENT.name}</span>
               )}
             </span>
-          </span>
+          </h1>
 
-          <motion.span
+          <motion.p
             initial={{ opacity: 0, y: 14 }}
             animate={ready ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.9, delay: 0.85, ease: EASE }}
-            className="mt-1 flex items-center justify-center gap-3 font-mono text-[10px] tracking-[0.44em] text-bone/55 uppercase sm:gap-5 sm:text-xs"
+            transition={{ duration: 0.9, delay: 0.8, ease: EASE }}
+            className="font-mono text-[10px] tracking-[0.4em] text-bone/50 uppercase sm:text-xs"
           >
-            <span className="h-px w-8 bg-gradient-to-r from-transparent to-electric-300/60 sm:w-20" />
             BY {EVENT.host}
-            <span className="h-px w-8 bg-gradient-to-l from-transparent to-electric-300/60 sm:w-20" />
-          </motion.span>
-        </h1>
+          </motion.p>
 
-        <motion.p
-          initial={{ opacity: 0, y: 22 }}
-          animate={ready ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 1, delay: 1, ease: EASE }}
-          className="mt-10 max-w-2xl text-balance"
-        >
-          <span className="font-display block text-2xl leading-[1.05] tracking-[0.02em] text-bone uppercase sm:text-4xl">
-            {EVENT.tagline}
-          </span>
-          <span className="mt-2 block font-mono text-[10px] tracking-[0.3em] text-electric-200/75 uppercase sm:text-xs">
-            {EVENT.subTagline}
-          </span>
-        </motion.p>
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={ready ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 1, delay: 0.95, ease: EASE }}
+            className="font-display mt-8 max-w-xl text-2xl leading-[1.15] font-light text-bone italic sm:text-4xl"
+          >
+            {EVENT.tagline}.
+            <span className="text-electric-300"> {EVENT.subTagline}.</span>
+          </motion.p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 26 }}
-          animate={ready ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 1, delay: 1.15, ease: EASE }}
-          className="mt-11 flex flex-col items-center gap-4 sm:flex-row sm:gap-5"
-        >
-          <NeonButton href="#passes" size="lg">
-            <Ticket className="size-4" strokeWidth={2.5} />
-            GET PASSES
-          </NeonButton>
-          <NeonButton href="#event" variant="ghost" size="lg">
-            EVENT DETAILS
-          </NeonButton>
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={ready ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 1, delay: 1.05, ease: EASE }}
+            className="mt-5 max-w-md text-sm leading-relaxed text-bone/55"
+          >
+            Sunday afternoon, five hours, one room in Hyderabad. Unlimited food,
+            unlimited mocktails, and not a single drop of alcohol on the premises.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={ready ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 1, delay: 1.2, ease: EASE }}
+            className="mt-10 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4"
+          >
+            <NeonButton href="#passes" size="lg">
+              <Ticket className="size-4" strokeWidth={2} />
+              GET PASSES
+            </NeonButton>
+            <NeonButton href="#venue" variant="ghost" size="lg">
+              <MapPin className="size-4" strokeWidth={2} />
+              THE VENUE
+            </NeonButton>
+          </motion.div>
+
+          <motion.dl
+            initial={{ opacity: 0 }}
+            animate={ready ? { opacity: 1 } : {}}
+            transition={{ duration: 1, delay: 1.35 }}
+            className="mt-12 grid w-full max-w-lg grid-cols-2 gap-x-8 gap-y-6 border-t border-white/10 pt-8 sm:grid-cols-3"
+          >
+            {[
+              { label: "WHEN", value: "SUN 27 SEP" },
+              { label: "DOORS", value: "12 — 5 PM" },
+              { label: "WHERE", value: "OUZO CLUB" },
+            ].map((item) => (
+              <div key={item.label}>
+                <dt className="font-mono text-[8px] tracking-[0.3em] text-bone/35 uppercase">
+                  {item.label}
+                </dt>
+                <dd className="font-display mt-1.5 text-lg tracking-[0.02em] text-bone uppercase sm:text-xl">
+                  {item.value}
+                </dd>
+              </div>
+            ))}
+          </motion.dl>
         </motion.div>
 
-        <motion.ul
-          initial={{ opacity: 0 }}
-          animate={ready ? { opacity: 1 } : {}}
-          transition={{ duration: 1, delay: 1.35 }}
-          className="mt-14 flex flex-wrap items-center justify-center gap-x-8 gap-y-4"
+        {/* The actual poster, propped up like it's taped to a wall. */}
+        <motion.div
+          style={reduced ? undefined : { y: posterY }}
+          initial={{ opacity: 0, y: 60, rotate: -4 }}
+          animate={ready ? { opacity: 1, y: 0, rotate: -2.2 } : {}}
+          transition={{ duration: 1.3, delay: 0.5, ease: EASE }}
+          className="relative mx-auto w-full max-w-sm lg:max-w-none"
         >
-          {META.map(({ icon: Icon, label }) => (
-            <li
-              key={label}
-              className="flex items-center gap-2.5 font-mono text-[10px] tracking-[0.26em] text-bone/50 uppercase transition-colors hover:text-bone/85"
-            >
-              <Icon className="size-3.5 text-electric-300" strokeWidth={2} />
-              {label}
-            </li>
-          ))}
-        </motion.ul>
-      </motion.div>
+          <motion.div
+            animate={reduced ? {} : { rotate: [-2.2, -0.8, -2.2], y: [0, -10, 0] }}
+            transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
+            className="relative"
+          >
+            <div className="absolute -inset-8 rounded-full bg-[radial-gradient(circle,rgba(96,105,240,0.35),transparent_68%)] blur-3xl" />
+            <div className="relative overflow-hidden rounded-2xl border border-white/12 shadow-[0_50px_120px_-40px_rgba(0,0,0,0.95)]">
+              <Image
+                src="/media/poster.jpg"
+                alt={`${EVENT.name} by ${EVENT.host} — ${EVENT.dateLabel}, ${EVENT.timeLabel}`}
+                width={1200}
+                height={1184}
+                priority
+                sizes="(max-width: 1024px) 90vw, 460px"
+                className="h-auto w-full"
+              />
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(3,3,7,0.55),transparent_38%)]" />
+              <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.12] mix-blend-soft-light" />
+            </div>
+            <p className="mt-4 text-center font-mono text-[9px] tracking-[0.28em] text-bone/30 uppercase">
+              THE POSTER · SEP 27 · HYDERABAD
+            </p>
+          </motion.div>
+        </motion.div>
+      </div>
 
       <motion.a
-        href="#event"
+        href="#story"
         initial={{ opacity: 0 }}
         animate={ready ? { opacity: 1 } : {}}
         transition={{ duration: 1, delay: 1.6 }}
-        className="absolute bottom-7 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2 font-mono text-[9px] tracking-[0.35em] text-bone/35 uppercase transition-colors hover:text-bone/80"
+        className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2 font-mono text-[9px] tracking-[0.32em] text-bone/30 uppercase transition-colors hover:text-bone/70"
       >
-        SCROLL
+        KEEP GOING
         <motion.span
-          animate={reduced ? {} : { y: [0, 8, 0] }}
+          animate={reduced ? {} : { y: [0, 7, 0] }}
           transition={{ duration: 1.9, repeat: Infinity, ease: "easeInOut" }}
         >
           <ArrowDown className="size-3.5" />

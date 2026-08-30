@@ -7,9 +7,10 @@ import { Ticket } from "lucide-react";
 import { EVENT } from "@/lib/event";
 
 const LINKS = [
-  { label: "EVENT", href: "#event" },
+  { label: "THE PARTY", href: "#story" },
+  { label: "VENUE", href: "#venue" },
   { label: "PASSES", href: "#passes" },
-  { label: "INFO", href: "#info" },
+  { label: "RULES", href: "#rules" },
 ];
 
 export function Navbar() {
@@ -37,15 +38,15 @@ export function Navbar() {
               href="#top"
               className="group flex items-baseline gap-2 leading-none"
             >
-              <span className="font-display text-lg tracking-[0.14em] text-bone uppercase transition-colors group-hover:text-cyan-glow">
+              <span className="font-display text-lg font-light tracking-[0.1em] text-bone uppercase transition-colors group-hover:text-electric-200">
                 {EVENT.name}
               </span>
               <span className="hidden font-mono text-[9px] tracking-[0.3em] text-bone/40 uppercase sm:inline">
-                / AVION
+                / AVION PRODUCTIONS
               </span>
             </a>
 
-            <ul className="hidden items-center gap-7 md:flex">
+            <ul className="hidden items-center gap-6 lg:flex">
               {LINKS.map((link) => (
                 <li key={link.href}>
                   <a
@@ -53,7 +54,7 @@ export function Navbar() {
                     className="relative font-mono text-[10px] tracking-[0.3em] text-bone/60 uppercase transition-colors hover:text-bone"
                   >
                     {link.label}
-                    <span className="absolute -bottom-1.5 left-0 h-px w-0 bg-cyan-glow transition-all duration-300 hover:w-full" />
+                    <span className="absolute -bottom-1.5 left-0 h-px w-0 bg-electric-300 transition-all duration-300 hover:w-full" />
                   </a>
                 </li>
               ))}
@@ -63,7 +64,7 @@ export function Navbar() {
               href="#passes"
               className="group relative flex items-center gap-2 overflow-hidden rounded-full bg-bone px-4 py-2 font-mono text-[10px] font-bold tracking-[0.2em] text-void uppercase transition-transform duration-300 hover:scale-[1.04] sm:px-5"
             >
-              <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-electric-400 to-cyan-glow transition-transform duration-500 group-hover:translate-x-0" />
+              <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-electric-400 to-violet-haze transition-transform duration-500 group-hover:translate-x-0" />
               <Ticket className="relative size-3.5" strokeWidth={2.5} />
               <span className="relative">GET PASSES</span>
             </a>

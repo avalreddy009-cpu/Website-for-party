@@ -1,4 +1,4 @@
-export type PassId = "general" | "vip" | "underground";
+export type PassId = "early" | "vip";
 
 export type PassTier = {
   id: PassId;
@@ -6,83 +6,65 @@ export type PassTier = {
   name: string;
   subtitle: string;
   price: number;
-  strikePrice?: number;
   badge?: string;
   blurb: string;
   perks: string[];
-  capacity: string;
+  notIncluded: string;
   accent: string;
   accentSoft: string;
 };
 
 export const PASSES: PassTier[] = [
   {
-    id: "general",
+    id: "early",
     index: "01",
-    name: "GENERAL ENTRY",
-    subtitle: "THE FLOOR",
-    price: 899,
-    strikePrice: 1199,
+    name: "EARLY BIRD",
+    subtitle: "General entry",
+    price: 1249,
+    badge: "CHEAPEST IT WILL EVER BE",
     blurb:
-      "Get in, get lost. Full access to the main floor and every drop from noon to five.",
+      "The whole party, none of the frills. Five hours on the floor, food and mocktails you don't have to keep paying for.",
     perks: [
-      "Full entry access · 12:00 PM — 5:00 PM",
-      "Main floor + open-air sound stage",
-      "Welcome shot on arrival",
-      "Access to food & drink counters (pay as you go)",
-      "Cloakroom + free hydration bar",
+      "Entry from 12:00 PM, stay till they switch the lights on",
+      "Unlimited food — actual food, not two nachos and a prayer",
+      "Unlimited mocktails, refilled until you're bored of them",
+      "Live DJ, full rig, lasers doing their thing",
+      "Free cloakroom so you're not dancing with a backpack",
     ],
-    capacity: "420 PASSES RELEASED",
-    accent: "#3d82ff",
-    accentSoft: "rgba(61, 130, 255, 0.45)",
+    notIncluded: "No table, no queue-skip. You'll survive.",
+    accent: "#7d8bff",
+    accentSoft: "rgba(125, 139, 255, 0.42)",
   },
   {
     id: "vip",
     index: "02",
-    name: "VIP ACCESS",
-    subtitle: "THE ELEVATED DECK",
-    price: 2199,
-    strikePrice: 2799,
-    badge: "MOST WANTED",
+    name: "VIP",
+    subtitle: "Lounge + table",
+    price: 1549,
+    badge: "₹300 MORE. WORTH IT.",
     blurb:
-      "Skip the line, take the deck. Elevated views, faster bar, and a curated plate.",
+      "Everything in Early Bird, plus somewhere to sit, someone to bring it over, and no standing in the sun waiting to get in.",
     perks: [
-      "Fast-track entry · zero queue",
-      "Elevated VIP deck overlooking the floor",
-      "2 premium drinks + curated food platter",
-      "Dedicated express bar & washrooms",
-      "UTOPIA enamel pin + holographic wristband",
-      "Priority re-entry all afternoon",
+      "Everything in the Early Bird pass",
+      "Skip the queue — walk past everyone, don't make eye contact",
+      "Private lounge with a table that is actually yours",
+      "Table service, so nobody has to volunteer as drink runner",
+      "A bouncer looking after the section (and your bag)",
+      "One song request to the DJ. One. Choose carefully.",
     ],
-    capacity: "140 PASSES RELEASED",
-    accent: "#55e6ff",
-    accentSoft: "rgba(85, 230, 255, 0.45)",
-  },
-  {
-    id: "underground",
-    index: "03",
-    name: "UNDERGROUND PASS",
-    subtitle: "THE DJ ZONE",
-    price: 3999,
-    badge: "ONLY 60 LEFT",
-    blurb:
-      "Behind the decks with the artists. The pass for the right people — nothing held back.",
-    perks: [
-      "DJ zone + booth-side access during sets",
-      "Unlimited food & bar, all five hours",
-      "Exclusive UTOPIA merch drop (tee + tote)",
-      "Artist meet & greet between sets",
-      "Invite to the undisclosed afterparty",
-      "Personal host + private entrance",
-    ],
-    capacity: "60 PASSES RELEASED",
-    accent: "#6b3bff",
-    accentSoft: "rgba(107, 59, 255, 0.5)",
+    notIncluded: "Still no alcohol. We're not negotiating.",
+    accent: "#ff3b3b",
+    accentSoft: "rgba(255, 59, 59, 0.38)",
   },
 ];
 
-export const BOOKING_FEE_RATE = 0.07;
+export const BOOKING_FEE_RATE = 0.05;
+export const MAX_QUANTITY = 8;
 
 export function getPassById(id: PassId): PassTier {
   return PASSES.find((pass) => pass.id === id) ?? PASSES[0];
+}
+
+export function isPassId(value: string): value is PassId {
+  return PASSES.some((pass) => pass.id === value);
 }

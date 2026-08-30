@@ -8,26 +8,28 @@ import { CheckoutModal } from "@/components/CheckoutModal";
 import { EventInfo } from "@/components/EventInfo";
 import { Footer } from "@/components/Footer";
 import { Hero } from "@/components/Hero";
+import { HouseRules } from "@/components/HouseRules";
 import { Marquee } from "@/components/Marquee";
 import { Navbar } from "@/components/Navbar";
 import { PassTiers } from "@/components/PassTiers";
 import { Preloader } from "@/components/Preloader";
+import { AvionBand, StoryBand, TeaserBand } from "@/components/StoryBand";
 import type { PassTier } from "@/lib/passes";
 
 const TICKER = [
   "UTOPIA",
-  "SEP 27",
-  "12:00 — 17:00",
+  "SUN 27 SEP",
+  "12 — 5 PM",
+  "OUZO CLUB & KITCHEN",
+  "HYDERABAD",
   "AVION PRODUCTIONS",
-  "NO SPECTATORS",
-  "THE STATE OF ESCAPE",
 ];
 
 const TICKER_LOWER = [
-  "THE PARTY FOR THE RIGHT PEOPLE",
-  "LOCATION CLASSIFIED",
-  "21+ ONLY",
-  "PASSES LIMITED",
+  "UNLIMITED FOOD",
+  "UNLIMITED MOCKTAILS",
+  "ZERO ALCOHOL",
+  "HOME BY SIX",
 ];
 
 export default function Home() {
@@ -68,11 +70,19 @@ export default function Home() {
 
         <Marquee items={TICKER} />
 
+        <StoryBand />
+
+        <TeaserBand />
+
         <EventInfo />
 
         <PassTiers onBuy={handleBuy} />
 
         <Marquee items={TICKER_LOWER} reverse />
+
+        <HouseRules />
+
+        <AvionBand />
       </main>
 
       <Footer />

@@ -44,7 +44,7 @@ export function Countdown() {
     <div className="w-full">
       <div className="mb-5 flex items-center justify-between font-mono text-[9px] tracking-[0.34em] text-bone/40 uppercase sm:text-[10px]">
         <span className="text-electric-200/80">
-          {remaining?.done ? "WE ARE INSIDE" : "GATES OPEN IN"}
+          {remaining?.done ? "IT'S HAPPENING NOW" : "DOORS OPEN IN"}
         </span>
         <span suppressHydrationWarning>
           {target.toLocaleDateString("en-GB", {
@@ -68,7 +68,7 @@ export function Countdown() {
             <span className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-electric-300/70 to-transparent" />
             <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(31,91,255,0.28),transparent_70%)] opacity-60 transition-opacity duration-500 group-hover:opacity-100" />
 
-            <div className="relative flex h-[1em] items-center justify-center overflow-hidden font-display text-4xl leading-none tracking-[0.02em] text-bone tabular-nums sm:text-6xl lg:text-7xl">
+            <div className="relative flex h-[1.05em] items-center justify-center overflow-hidden font-display text-4xl leading-none font-light text-bone tabular-nums sm:text-6xl lg:text-7xl">
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.span
                   key={remaining ? remaining[key] : "idle"}

@@ -27,12 +27,12 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
   const [hovered, setHovered] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const tiltX = useSpring(0, { stiffness: 180, damping: 20 });
-  const tiltY = useSpring(0, { stiffness: 180, damping: 20 });
+  const tiltX = useSpring(0, { stiffness: 170, damping: 20 });
+  const tiltY = useSpring(0, { stiffness: 170, damping: 20 });
   const pointerX = useMotionValue(50);
   const pointerY = useMotionValue(50);
 
-  const spotlight = useMotionTemplate`radial-gradient(420px circle at ${pointerX}% ${pointerY}%, ${pass.accentSoft}, transparent 62%)`;
+  const spotlight = useMotionTemplate`radial-gradient(460px circle at ${pointerX}% ${pointerY}%, ${pass.accentSoft}, transparent 62%)`;
 
   const handleMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (reduced || !cardRef.current) return;
@@ -41,8 +41,8 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
     const py = (event.clientY - rect.top) / rect.height;
     pointerX.set(px * 100);
     pointerY.set(py * 100);
-    tiltY.set((px - 0.5) * 13);
-    tiltX.set((0.5 - py) * 13);
+    tiltY.set((px - 0.5) * 11);
+    tiltX.set((0.5 - py) * 11);
   };
 
   const handleLeave = () => {
@@ -54,21 +54,20 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
   };
 
   const faceClass =
-    "absolute inset-0 flex flex-col overflow-hidden rounded-[26px] p-6 backface-hidden sm:p-7";
+    "absolute inset-0 flex flex-col overflow-hidden rounded-[26px] p-6 backface-hidden sm:p-8";
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 70, rotateX: reduced ? 0 : -8 }}
+      initial={{ opacity: 0, y: 60, rotateX: reduced ? 0 : -7 }}
       whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
       viewport={{ once: true, amount: 0.25 }}
       transition={{ duration: 0.95, delay: index * 0.12, ease: EASE }}
-      className="perspective-card relative h-[560px] w-full sm:h-[580px]"
+      className="perspective-card relative h-[600px] w-full sm:h-[620px]"
     >
-      {/* Ambient halo that swells on hover. */}
       <motion.div
         aria-hidden
         className="pointer-events-none absolute -inset-6 rounded-[40px] blur-3xl transition-opacity duration-500"
-        animate={{ opacity: hovered ? 0.85 : 0.32 }}
+        animate={{ opacity: hovered ? 0.55 : 0.15 }}
         style={{
           background: `radial-gradient(circle at 50% 45%, ${pass.accentSoft}, transparent 68%)`,
         }}
@@ -90,17 +89,14 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
           className="relative size-full"
           style={{ transformStyle: "preserve-3d" }}
           animate={{ rotateY: flipped ? 180 : 0 }}
-          transition={{ duration: 0.95, ease: [0.68, -0.15, 0.27, 1.15] }}
+          transition={{ duration: 0.95, ease: [0.68, -0.12, 0.27, 1.12] }}
         >
-          {/* ---------------- FRONT ---------------- */}
-          <div
-            className={`${faceClass} glass-strong`}
-            style={{ borderColor: hovered ? pass.accentSoft : undefined }}
-          >
+          {/* ------------------------------ FRONT ------------------------------ */}
+          <div className={`${faceClass} glass-strong`}>
             <motion.div
               aria-hidden
-              className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500"
-              style={{ background: spotlight, opacity: hovered ? 0.75 : 0 }}
+              className="pointer-events-none absolute inset-0 transition-opacity duration-500"
+              style={{ background: spotlight, opacity: hovered ? 0.6 : 0 }}
             />
             <div
               aria-hidden
@@ -109,19 +105,19 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
                 background: `linear-gradient(to right, transparent, ${pass.accent}, transparent)`,
               }}
             />
-            <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.12] mix-blend-soft-light" />
+            <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.1] mix-blend-soft-light" />
 
-            <div className="relative flex items-start justify-between">
-              <span className="font-mono text-[10px] tracking-[0.34em] text-bone/35">
+            <div className="relative flex items-start justify-between gap-3">
+              <span className="font-mono text-[10px] tracking-[0.32em] text-bone/30">
                 {pass.index}
               </span>
               {pass.badge && (
                 <motion.span
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-[8px] font-bold tracking-[0.22em] uppercase"
+                  className="rounded-full px-3 py-1.5 font-mono text-[8px] font-bold tracking-[0.2em] uppercase"
                   style={{
                     color: pass.accent,
                     border: `1px solid ${pass.accentSoft}`,
-                    background: "rgba(255,255,255,0.04)",
+                    background: "rgba(255,255,255,0.03)",
                   }}
                   animate={
                     reduced
@@ -129,84 +125,74 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
                       : {
                           boxShadow: [
                             `0 0 0px ${pass.accentSoft}`,
-                            `0 0 22px -2px ${pass.accentSoft}`,
+                            `0 0 20px -3px ${pass.accentSoft}`,
                             `0 0 0px ${pass.accentSoft}`,
                           ],
                         }
                   }
-                  transition={{ duration: 2.6, repeat: Infinity }}
+                  transition={{ duration: 3, repeat: Infinity }}
                 >
-                  <Sparkles className="size-2.5" />
                   {pass.badge}
                 </motion.span>
               )}
             </div>
 
-            <div className="relative mt-8">
+            <div className="relative mt-9">
               <p
-                className="font-mono text-[9px] tracking-[0.34em] uppercase"
+                className="font-mono text-[9px] tracking-[0.3em] uppercase"
                 style={{ color: pass.accent }}
               >
                 {pass.subtitle}
               </p>
-              <h3 className="font-display mt-3 text-3xl leading-[0.92] tracking-[0.02em] text-bone uppercase sm:text-4xl">
+              <h3 className="font-display mt-3 text-4xl leading-[0.95] font-light text-bone sm:text-5xl">
                 {pass.name}
               </h3>
             </div>
 
-            <div className="relative mt-7 flex items-end gap-3">
-              <span className="font-display text-5xl leading-none text-bone tabular-nums sm:text-6xl">
+            <div className="relative mt-7 flex items-baseline gap-2.5">
+              <span className="font-display text-5xl leading-none font-light text-bone tabular-nums sm:text-6xl">
                 {formatPrice(pass.price)}
               </span>
-              {pass.strikePrice && (
-                <span className="mb-1.5 font-mono text-xs text-bone/30 line-through">
-                  {formatPrice(pass.strikePrice)}
-                </span>
-              )}
+              <span className="font-mono text-[9px] tracking-[0.2em] text-bone/35 uppercase">
+                / person
+              </span>
             </div>
-            <p className="relative mt-1.5 font-mono text-[9px] tracking-[0.26em] text-bone/35 uppercase">
-              PER PERSON · ALL TAXES INCLUDED
-            </p>
 
             <p className="relative mt-6 text-sm leading-relaxed text-bone/55">
               {pass.blurb}
             </p>
 
-            <div className="relative mt-auto pt-6">
-              <div className="mb-5">
-                <div className="mb-2 flex items-center justify-between font-mono text-[8px] tracking-[0.24em] text-bone/35 uppercase">
-                  <span>{pass.capacity}</span>
-                  <span style={{ color: pass.accent }}>SELLING FAST</span>
-                </div>
-                <div className="h-[3px] w-full overflow-hidden rounded-full bg-white/8">
-                  <motion.div
-                    className="h-full rounded-full"
-                    style={{
-                      background: `linear-gradient(to right, ${pass.accent}, rgba(255,255,255,0.85))`,
-                    }}
-                    initial={{ width: "0%" }}
-                    whileInView={{ width: `${68 + index * 9}%` }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 1.4, delay: 0.4, ease: EASE }}
+            <ul className="relative mt-6 space-y-2.5">
+              {pass.perks.slice(0, 3).map((perk) => (
+                <li
+                  key={perk}
+                  className="flex items-start gap-2.5 text-xs leading-snug text-bone/45"
+                >
+                  <span
+                    className="mt-[5px] size-1 shrink-0 rounded-full"
+                    style={{ background: pass.accent }}
                   />
-                </div>
-              </div>
+                  <span className="line-clamp-1">{perk}</span>
+                </li>
+              ))}
+            </ul>
 
+            <div className="relative mt-auto pt-7">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => onBuy(pass)}
-                  className="group/buy relative flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-full bg-bone px-5 py-3.5 font-mono text-[10px] font-bold tracking-[0.22em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98]"
+                  className="group/buy relative flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-full bg-bone px-5 py-3.5 font-mono text-[10px] font-bold tracking-[0.2em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98]"
                 >
                   <span
                     className="absolute inset-0 translate-y-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover/buy:translate-y-0"
                     style={{
-                      background: `linear-gradient(135deg, ${pass.accent}, #6b3bff)`,
+                      background: `linear-gradient(135deg, ${pass.accent}, #5b4bff)`,
                     }}
                   />
                   <Ticket
                     className="relative size-3.5 transition-colors duration-300 group-hover/buy:text-bone"
-                    strokeWidth={2.5}
+                    strokeWidth={2}
                   />
                   <span className="relative transition-colors duration-300 group-hover/buy:text-bone">
                     BUY PASS
@@ -216,16 +202,19 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
                 <button
                   type="button"
                   onClick={() => setFlipped(true)}
-                  aria-label={`View perks for ${pass.name}`}
-                  className="rounded-full border border-white/12 px-5 py-3.5 font-mono text-[10px] tracking-[0.22em] text-bone/60 uppercase transition-all duration-300 hover:border-cyan-glow/60 hover:text-cyan-glow"
+                  aria-label={`See everything included in the ${pass.name} pass`}
+                  className="rounded-full border border-white/12 px-5 py-3.5 font-mono text-[10px] tracking-[0.2em] text-bone/60 uppercase transition-all duration-300 hover:border-electric-300/60 hover:text-electric-200"
                 >
-                  PERKS
+                  WHAT&apos;S IN IT
                 </button>
               </div>
+              <p className="mt-3.5 text-center font-mono text-[8px] tracking-[0.2em] text-bone/25 uppercase">
+                {pass.notIncluded}
+              </p>
             </div>
           </div>
 
-          {/* ---------------- BACK ---------------- */}
+          {/* ------------------------------- BACK ------------------------------ */}
           <div
             className={`${faceClass} glass-strong rotate-y-180`}
             style={{ borderColor: pass.accentSoft }}
@@ -235,47 +224,47 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
               className="pointer-events-none absolute inset-0"
               style={{
                 background: `radial-gradient(120% 90% at 50% 0%, ${pass.accentSoft}, transparent 62%)`,
-                opacity: 0.5,
+                opacity: 0.45,
               }}
             />
-            <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.12] mix-blend-soft-light" />
+            <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.1] mix-blend-soft-light" />
 
             <div className="relative flex items-center justify-between">
               <p
-                className="font-mono text-[9px] tracking-[0.34em] uppercase"
+                className="font-mono text-[9px] tracking-[0.3em] uppercase"
                 style={{ color: pass.accent }}
               >
-                WHAT YOU GET
+                EVERYTHING INCLUDED
               </p>
-              <span className="font-mono text-[10px] tracking-[0.3em] text-bone/35">
+              <span className="font-mono text-[10px] tracking-[0.28em] text-bone/30">
                 {pass.index}
               </span>
             </div>
 
-            <h3 className="font-display relative mt-4 text-2xl leading-[0.95] tracking-[0.02em] text-bone uppercase sm:text-3xl">
+            <h3 className="font-display relative mt-4 text-3xl leading-[0.98] font-light text-bone">
               {pass.name}
             </h3>
 
-            <ul className="relative mt-6 flex-1 space-y-3.5 overflow-y-auto pr-1">
+            <ul className="relative mt-6 flex-1 space-y-4 overflow-y-auto pr-1">
               {pass.perks.map((perk, i) => (
                 <motion.li
                   key={perk}
-                  className="flex items-start gap-3 text-[13px] leading-snug text-bone/70"
+                  className="flex items-start gap-3 text-[13px] leading-snug text-bone/72"
                   initial={false}
                   animate={
                     flipped
                       ? { opacity: 1, x: 0 }
-                      : { opacity: 0, x: reduced ? 0 : -14 }
+                      : { opacity: 0, x: reduced ? 0 : -12 }
                   }
                   transition={{
                     duration: 0.5,
-                    delay: flipped ? 0.42 + i * 0.07 : 0,
+                    delay: flipped ? 0.42 + i * 0.06 : 0,
                     ease: EASE,
                   }}
                 >
                   <span
                     className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full"
-                    style={{ background: pass.accentSoft, color: "#050810" }}
+                    style={{ background: pass.accentSoft, color: "#05050c" }}
                   >
                     <Check className="size-2.5" strokeWidth={3.5} />
                   </span>
@@ -284,11 +273,16 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
               ))}
             </ul>
 
-            <div className="relative mt-6 flex items-center gap-3">
+            <p className="relative mt-5 flex items-start gap-2 text-[11px] leading-snug text-bone/40">
+              <Sparkles className="mt-0.5 size-3 shrink-0" style={{ color: pass.accent }} />
+              {pass.notIncluded}
+            </p>
+
+            <div className="relative mt-5 flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setFlipped(false)}
-                aria-label={`Back to ${pass.name} summary`}
+                aria-label={`Back to the ${pass.name} summary`}
                 className="flex size-11 shrink-0 items-center justify-center rounded-full border border-white/12 text-bone/60 transition-all duration-300 hover:border-bone/40 hover:text-bone"
               >
                 <ArrowLeft className="size-4" />
@@ -296,7 +290,7 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
               <button
                 type="button"
                 onClick={() => onBuy(pass)}
-                className="group/buy relative flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-full border px-5 py-3.5 font-mono text-[10px] font-bold tracking-[0.22em] uppercase transition-transform duration-300 hover:scale-[1.03]"
+                className="group/buy relative flex flex-1 items-center justify-center gap-2 overflow-hidden rounded-full border px-5 py-3.5 font-mono text-[10px] font-bold tracking-[0.2em] uppercase transition-transform duration-300 hover:scale-[1.03]"
                 style={{ borderColor: pass.accentSoft, color: pass.accent }}
               >
                 <span
@@ -304,7 +298,7 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
                   style={{ background: pass.accent }}
                 />
                 <span className="relative transition-colors duration-300 group-hover/buy:text-void">
-                  BUY {formatPrice(pass.price)}
+                  TAKE IT — {formatPrice(pass.price)}
                 </span>
               </button>
             </div>

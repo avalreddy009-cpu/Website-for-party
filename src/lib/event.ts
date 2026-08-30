@@ -1,24 +1,37 @@
 export const EVENT = {
   name: "UTOPIA",
   host: "AVION PRODUCTIONS",
-  tagline: "The state of escape",
-  subTagline: "and the party for the right people",
-  dateLabel: "SEPTEMBER 27",
+  hostShort: "AVION",
+
+  // Straight off the poster.
+  tagline: "The party for the right people",
+  subTagline: "a state of escape",
+
+  dateLabel: "SUNDAY, SEPTEMBER 27",
   shortDateLabel: "SEP 27",
+  dayLabel: "SUNDAY",
   timeLabel: "12:00 PM — 5:00 PM",
-  doorsLabel: "DOORS 11:30 AM",
-  venueTeaser: "LOCATION CLASSIFIED",
-  venueHint: "Coordinates drop 24 hours before doors. Pass holders only.",
-  cityHint: "CITY CENTRE — WAREHOUSE DISTRICT",
-  ageLabel: "21+ ONLY · VALID ID MANDATORY",
-  email: "passes@avionproductions.live",
-  instagram: "https://instagram.com",
-  youtube: "https://youtube.com",
+  doorsLabel: "Doors at 12. Come early, the good spots go first.",
+
+  venueName: "Ouzo Club and Kitchen",
+  venueCity: "Hyderabad",
+  venueLine: "Ouzo Club and Kitchen · Hyderabad",
+  mapsUrl: "https://maps.app.goo.gl/2RwwfkFsRRg3G3rJ6",
+
+  // This is a dry day party. It is the whole point, so we say it everywhere.
+  policyShort: "Zero alcohol. Not one drop.",
+  policyLong:
+    "This is a day party built for people who usually get turned away at the door. Nobody is checking whether you're old enough to drink, because nobody is drinking.",
+
+  email: "passes@avionproductions.in",
+  instagram: "https://instagram.com/avion.productions",
+  youtube: "https://youtube.com/@avionproductions",
+
+  holdMinutes: 30,
 } as const;
 
 /**
- * The countdown always targets the next 27 September, 12:00 local time, so the
- * timer stays live across years instead of freezing at zero after the event.
+ * Always the next 27 September at noon, so the countdown never sits at zero.
  */
 export function getEventDate(from: Date = new Date()): Date {
   const candidate = new Date(from.getFullYear(), 8, 27, 12, 0, 0, 0);
