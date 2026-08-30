@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { LayoutDashboard, LogIn, Menu, Star, X } from "lucide-react";
 
@@ -8,10 +9,10 @@ import { EVENT } from "@/lib/event";
 import { toRoman } from "@/lib/roman";
 
 const LINKS = [
-  { label: "ABOUT", href: "#story" },
-  { label: "PASSES", href: "#passes" },
-  { label: "VENUE", href: "#venue" },
-  { label: "RULES", href: "#rules" },
+  { label: "ABOUT", href: "/#story" },
+  { label: "PASSES", href: "/#passes" },
+  { label: "VENUE", href: "/#venue" },
+  { label: "RULES", href: "/#rules" },
 ];
 
 export function Navbar() {
@@ -20,7 +21,7 @@ export function Navbar() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/admin/session")
+    fetch("/api/account/session")
       .then((response) => response.json())
       .then((data: { authenticated: boolean }) => {
         if (active) setAuthed(Boolean(data.authenticated));
@@ -34,7 +35,7 @@ export function Navbar() {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/8 bg-[#030307]/70 backdrop-blur-xl">
       <nav className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <a href="#top" className="group flex items-baseline gap-2 leading-none">
+        <Link href="/#top" className="group flex items-baseline gap-2 leading-none">
           <Star
             className="size-3 text-electric-300 transition-colors group-hover:text-bone"
             strokeWidth={1.6}
@@ -45,25 +46,25 @@ export function Navbar() {
           <span className="hidden font-mono text-[9px] tracking-[0.24em] text-bone/35 uppercase sm:inline">
             / {EVENT.host}
           </span>
-        </a>
+        </Link>
 
         <ul className="hidden items-center gap-7 lg:flex">
           {LINKS.map((link) => (
             <li key={link.href}>
-              <a
+              <Link
                 href={link.href}
                 className="relative font-mono text-[10px] tracking-[0.28em] text-bone/60 uppercase transition-colors hover:text-bone"
               >
                 {link.label}
                 <span className="absolute -bottom-1.5 left-0 h-px w-0 bg-electric-300 transition-all duration-300 hover:w-full" />
-              </a>
+              </Link>
             </li>
           ))}
         </ul>
 
         <div className="flex items-center gap-3">
-          <a
-            href={authed ? "/admin" : "/login"}
+          <Link
+            href={authed ? "/account" : "/login"}
             className="group flex items-center gap-2 border border-white/18 px-3.5 py-1.5 font-mono text-[9px] tracking-[0.22em] text-bone/75 uppercase transition-all duration-300 hover:border-electric-300/60 hover:text-bone sm:px-4 sm:py-2"
           >
             {authed ? (
@@ -71,8 +72,8 @@ export function Navbar() {
             ) : (
               <LogIn className="size-3.5" strokeWidth={2} />
             )}
-            {authed ? "DASHBOARD" : "LOGIN"}
-          </a>
+            {authed ? "MY PASSES" : "LOGIN"}
+          </Link>
 
           <span className="hidden font-mono text-[9px] tracking-[0.24em] text-bone/35 uppercase md:inline">
             {EVENT.venueCode} · {EVENT.timezoneCode}
@@ -102,15 +103,24 @@ export function Navbar() {
             <ul className="flex flex-col px-5 py-3">
               {LINKS.map((link) => (
                 <li key={link.href}>
-                  <a
-                    href={link.href}
-                    onClick={() => setMenuOpen(false)}
-                    className="block py-3 font-mono text-xs tracking-[0.24em] text-bone/70 uppercase transition-colors hover:text-bone"
-                  >
-                    {link.label}
-                  </a>
+              <Link
+                href={link.href}
+                onClick={() => setMenuOpen(false)}
+                className="block py-3 font-mono text-xs tracking-[0.24em] text-bone/70 uppercase transition-colors hover:text-bone"
+              >
+                {link.label}
+              </Link>
                 </li>
               ))}
+              <li>
+                <Link
+                  href={authed ? "/account" : "/login"}
+                  onClick={() => setMenuOpen(false)}
+                  className="block py-3 font-mono text-xs tracking-[0.24em] text-bone/70 uppercase transition-colors hover:text-bone"
+                >
+                  {authed ? "MY PASSES" : "LOGIN"}
+                </Link>
+              </li>
             </ul>
           </motion.div>
         )}

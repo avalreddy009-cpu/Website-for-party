@@ -14,7 +14,7 @@ export function LogoutButton() {
     try {
       await fetch("/api/admin/logout", { method: "POST" });
     } finally {
-      router.push("/login");
+      router.push("/admin");
       router.refresh();
     }
   };

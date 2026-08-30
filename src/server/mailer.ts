@@ -126,6 +126,22 @@ export async function sendVerificationCode(
   return send(to, `${code} is your UTOPIA code`, html, text);
 }
 
+export async function sendLoginCode(to: string, code: string): Promise<SendResult> {
+  const html = shell(
+    "Log in to your passes",
+    `<p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#c9cadb">
+       Punch this into the site to see your UTOPIA reservations. Staff don't use this screen.
+     </p>
+     <p style="margin:0 0 20px;padding:18px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
+               font-family:'Courier New',monospace;font-size:34px;letter-spacing:.34em;color:#ffffff">${code}</p>
+     <p style="margin:0;font-size:13px;line-height:1.7;color:#8c8fa8">
+       Good for 10 minutes. If you didn't ask for this, ignore it.
+     </p>`,
+  );
+  const text = `Your UTOPIA login code is ${code}. It expires in 10 minutes.`;
+  return send(to, `${code} is your UTOPIA login code`, html, text);
+}
+
 export async function sendOrderConfirmation(order: Order, passName: string): Promise<SendResult> {
   const firstName = order.buyer.name.split(" ")[0] || "there";
   const row = (label: string, value: string) =>

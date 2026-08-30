@@ -94,8 +94,9 @@ The landing page is a Next.js client, but money, approval, and entry are not:
   same function.
 - Pass QR payloads are HMAC-signed. A screenshot of someone else's name +
   digits is not enough; the door panel verifies the signature.
-- CMS (`/login`) and door (`/door`) each unlock with a **different** 12-word
-  phrase so scanner staff cannot approve payments.
+- CMS (`/admin`) and door (`/door`) each unlock with a **different** 12-word
+  phrase so scanner staff cannot approve payments. Header LOGIN is guest-only
+  (email + 6-digit code) and never opens the CMS.
 
 ### API
 
@@ -105,6 +106,9 @@ The landing page is a Next.js client, but money, approval, and entry are not:
 | `POST /api/passes/verify/confirm` | Exchanges a correct code for a signed token |
 | `POST /api/passes/reserve` | Creates the reservation, returns UPI QR |
 | `POST /api/passes/pay` | Records optional UTR; order stays `reserved` |
+| `POST /api/account/login` | Guest: email a 6-digit login code |
+| `POST /api/account/login/confirm` | Guest session cookie (buyer-session HMAC) |
+| `GET /api/account/orders` | That guest's reservations only |
 | `POST /api/admin/login` | 12-word CMS unlock → httpOnly cookie |
 | `GET /api/admin/orders` | List + stats (CMS session) |
 | `POST /api/admin/orders/:id/approve` | Marks paid, mints QR, emails pass |
@@ -122,24 +126,27 @@ back to in-process memory (lost on cold start). Point `store.ts` at Postgres
 or Vercel KV before real ticket volume. The rest of the app already talks to
 the store through functions, not files.
 
-## Staff surfaces
+## Guest vs staff
 
-- `/login` — 12-word CMS unlock (approve/reject UPI)
-- `/admin` — reservations
-- `/admin/scans` — every door scan, including misses
-- `/door` — 12-word door unlock, camera + 6-digit entry, live scan log
+- `/login` — guest email + 6-digit code (header LOGIN)
+- `/account` — that guest's passes
+- `/admin` — unlisted CMS. 12-word phrase if you're not staff
+- `/admin/scans` — door scan log (CMS session)
+- `/door` — 12-word door unlock, camera + 6-digit entry
 
 ## Structure
 
 ```
 src/
 ├── app/
+│   ├── account/               # guest pass list
+│   ├── login/                 # guest email login
+│   ├── admin/                 # CMS (phrase gate if locked)
+│   ├── door/                  # QR verify panel
+│   ├── api/account/…          # guest session + orders
 │   ├── api/passes/…           # verify, reserve, pay
 │   ├── api/admin/…            # phrase login, orders, scans
 │   ├── api/door/…             # phrase login, scan
-│   ├── admin/                 # CMS
-│   ├── door/                  # QR verify panel
-│   ├── login/                 # CMS phrase unlock
 │   └── page.tsx
 ├── components/                # landing + checkout + PhraseUnlock
 ├── lib/                       # event, passes, pricing, validation

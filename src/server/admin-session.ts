@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 
-import { ADMIN_SESSION_COOKIE, DOOR_SESSION_COOKIE } from "./admin-auth";
-import { verifyAdminSession, verifyDoorSession } from "./store";
+import { ADMIN_SESSION_COOKIE, BUYER_SESSION_COOKIE, DOOR_SESSION_COOKIE } from "./admin-auth";
+import { verifyAdminSession, verifyBuyerSession, verifyDoorSession } from "./store";
 
 /** Shared by the admin layout (redirect) and every /api/admin/* route (401). */
 export async function getAdminSession(): Promise<{ username: string } | null> {
@@ -16,4 +16,11 @@ export async function getDoorSession(): Promise<{ username: string } | null> {
   const token = cookieStore.get(DOOR_SESSION_COOKIE)?.value;
   if (!token) return null;
   return verifyDoorSession(token);
+}
+
+export async function getBuyerSession(): Promise<{ email: string } | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(BUYER_SESSION_COOKIE)?.value;
+  if (!token) return null;
+  return verifyBuyerSession(token);
 }

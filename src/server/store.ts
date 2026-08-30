@@ -7,7 +7,7 @@ import { derivePassDigits } from "./pass-code";
 import { getPhraseHashes } from "./phrase";
 
 // Mint (or load) CMS/door phrases on first import so `next dev` prints them
-// before anyone hits /login.
+// before anyone hits /admin.
 getPhraseHashes();
 
 /**
@@ -228,7 +228,7 @@ export function checkCode(email: string, code: string): CheckResult {
  * replayed as an admin session (or vice versa), even though both are just
  * HMAC-signed strings from the same secret.
  */
-type TokenPurpose = "verify-email" | "admin-session" | "door-session" | "pass-qr";
+type TokenPurpose = "verify-email" | "buyer-session" | "admin-session" | "door-session" | "pass-qr";
 
 function signPurposeToken(purpose: TokenPurpose, subject: string, ttlMs: number): string {
   const expires = Date.now() + ttlMs;
@@ -276,6 +276,18 @@ export function signToken(email: string): string {
 
 export function verifyToken(token: string, email: string): boolean {
   return decodePurposeToken("verify-email", token)?.subject === email;
+}
+
+const BUYER_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+/** Cookie for a guest looking up their own passes — not staff, not door. */
+export function signBuyerSession(email: string): string {
+  return signPurposeToken("buyer-session", email, BUYER_SESSION_TTL_MS);
+}
+
+export function verifyBuyerSession(token: string): { email: string } | null {
+  const decoded = decodePurposeToken("buyer-session", token);
+  return decoded ? { email: decoded.subject } : null;
 }
 
 /** Signed cookie payload for the admin CMS — same primitive, its own purpose tag. */
@@ -348,6 +360,11 @@ export function getOrderById(id: string): Order | undefined {
 
 export function listOrders(): Order[] {
   return Object.values(db.orders).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export function listOrdersByEmail(email: string): Order[] {
+  const needle = email.trim().toLowerCase();
+  return listOrders().filter((order) => order.buyer.email === needle);
 }
 
 export function countPassesSold(passId: PassId): number {

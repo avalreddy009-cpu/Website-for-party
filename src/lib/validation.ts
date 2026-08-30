@@ -48,6 +48,10 @@ export const confirmCodeSchema = z.object({
     .regex(/^\d{6}$/, "The code is 6 digits"),
 });
 
+export const emailLoginSchema = z.object({
+  email: emailSchema,
+});
+
 export const reserveSchema = orderIntentSchema.extend({
   verificationToken: z.string().min(10, "Verify your email first"),
 });
