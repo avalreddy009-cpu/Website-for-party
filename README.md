@@ -77,8 +77,9 @@ Six steps, `PASS → DETAILS → VERIFY → CONFIRM → PAY → DONE`:
    uses, so client and server can never disagree about what's acceptable.
 3. **VERIFY** — `POST /api/passes/verify` emails a 6-digit code.
 4. **CONFIRM** — order review, 5% booking fee, dry-event acknowledgement.
-5. **PAY** — UPI QR + VPA + amount from **server** pricing. Optional UTR.
-   Hitting "I've paid" does **not** issue a pass.
+5. **PAY** — UPI QR + VPA + FamPay/PhonePe/GPay/Paytm. **12-digit UTR and a
+   screenshot are required.** Entering the UTR does not submit. App buttons only
+   open payment. Hitting submit still does **not** issue a pass.
 6. **DONE** — reservation held. An admin confirms the UPI credit in `/admin`.
    Approval emails the pass: name, 6-digit door code (HMAC of email+phone, not
    a substring), and a signed QR.

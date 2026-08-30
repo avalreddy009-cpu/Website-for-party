@@ -75,12 +75,14 @@ export const payProofSchema = z.object({
   utr: z
     .string()
     .trim()
-    .max(40)
-    .optional()
-    .transform((value) => value?.replace(/\s+/g, "") || undefined)
-    .refine((value) => !value || /^[A-Za-z0-9]{8,22}$/.test(value), {
-      message: "UTR is 8–22 letters or digits if you have one",
-    }),
+    .transform((value) => value.replace(/\D/g, ""))
+    .pipe(z.string().regex(/^\d{12}$/, "UTR is the 12-digit number from your UPI app")),
+  proofName: z.string().trim().min(1, "Upload the payment screenshot").max(180),
+  proofMime: z.literal("image/jpeg"),
+  proofData: z
+    .string()
+    .regex(/^data:image\/jpeg;base64,/, "Upload a screenshot of the payment")
+    .max(400_000, "That screenshot is too large. Crop it and try again."),
 });
 
 export const scanPayloadSchema = z.object({

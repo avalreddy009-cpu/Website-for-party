@@ -6,7 +6,7 @@ import { attachPaymentProof, verifyToken } from "@/server/store";
 
 export const runtime = "nodejs";
 
-/** Buyer says they paid. We record the UTR; the order stays reserved until CMS approval. */
+/** Buyer says they paid. Requires a 12-digit UTR and screenshot; order stays reserved until CMS approval. */
 export async function POST(request: Request) {
   const limited = rateLimit(clientKey(request, "pay-proof"), 20, 10 * 60 * 1000);
   if (!limited.allowed) {
@@ -31,7 +31,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { email, reference, verificationToken, utr } = parsed.data;
+  const { email, reference, verificationToken, utr, proofName, proofMime, proofData } =
+    parsed.data;
 
   if (!verifyToken(verificationToken, email)) {
     return NextResponse.json(
@@ -40,7 +41,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = attachPaymentProof(reference, email, utr);
+  const result = attachPaymentProof(reference, email, {
+    utr,
+    proofName,
+    proofMime,
+    proofData,
+  });
   if (!result.ok) {
     if (result.reason === "already-decided") {
       return NextResponse.json(

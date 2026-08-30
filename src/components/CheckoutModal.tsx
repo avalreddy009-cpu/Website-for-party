@@ -24,11 +24,19 @@ import {
   QrCode,
   RefreshCw,
   ShieldCheck,
+  Upload,
   User,
   X,
 } from "lucide-react";
 
 import { EVENT, formatPrice } from "@/lib/event";
+import {
+  compressPaymentScreenshot,
+  isCompleteUtr,
+  normalizeUtr,
+  type PaymentScreenshot,
+} from "@/lib/payment-proof";
+import { UPI_APPS, upiAppHref } from "@/lib/upi-apps";
 import {
   BOOKING_FEE_RATE,
   MAX_QUANTITY,
@@ -44,7 +52,9 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 const STEPS = ["PASS", "DETAILS", "VERIFY", "CONFIRM", "PAY", "DONE"] as const;
 
 type FormState = { name: string; email: string; phone: string };
-type Errors = Partial<Record<"name" | "email" | "phone" | "code" | "terms" | "utr" | "form", string>>;
+type Errors = Partial<
+  Record<"name" | "email" | "phone" | "code" | "terms" | "utr" | "proof" | "form", string>
+>;
 
 const EMPTY_FORM: FormState = { name: "", email: "", phone: "" };
 
@@ -216,6 +226,7 @@ function CheckoutFlow({
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [copied, setCopied] = useState(false);
   const [utr, setUtr] = useState("");
+  const [proof, setProof] = useState<PaymentScreenshot | null>(null);
 
   const tier = getPassById(tierId);
   const totals = useMemo(() => priceOrder(tierId, quantity), [tierId, quantity]);
@@ -332,6 +343,14 @@ function CheckoutFlow({
       setErrors({ form: "Your verification expired. Go back and resend the code." });
       return;
     }
+    if (!isCompleteUtr(utr)) {
+      setErrors({ utr: "Enter the 12-digit UTR from the UPI app before submitting." });
+      return;
+    }
+    if (!proof) {
+      setErrors({ proof: "Upload the payment screenshot. UTR alone isn't enough." });
+      return;
+    }
 
     setBusyState(true);
     setErrors({});
@@ -339,17 +358,24 @@ function CheckoutFlow({
       email: form.email,
       reference: reservation.reference,
       verificationToken: token,
-      utr: utr.trim() || undefined,
+      utr: normalizeUtr(utr),
+      proofName: proof.name,
+      proofMime: proof.mime,
+      proofData: proof.dataUrl,
     });
     setBusyState(false);
 
     if (!result.ok) {
-      setErrors({ utr: result.fields?.utr, form: result.fields ? undefined : result.error });
+      setErrors({
+        utr: result.fields?.utr,
+        proof: result.fields?.proofData ?? result.fields?.proofName,
+        form: result.fields ? undefined : result.error,
+      });
       return;
     }
     setDirection(1);
     setStep(5);
-  }, [form.email, reservation, setBusyState, token, utr]);
+  }, [form.email, proof, reservation, setBusyState, token, utr]);
 
   const handleNext = useCallback(() => {
     if (busy) return;
@@ -371,9 +397,17 @@ function CheckoutFlow({
     }
   };
 
-  const nextLabel = ["CONTINUE", "EMAIL ME A CODE", "VERIFY", "PAY WITH UPI", "I'VE PAID"][step];
-  const busyLabel = ["", "SENDING CODE", "CHECKING", "RESERVING", "SAVING"][step];
-  const canAdvance = step !== 2 || code.replace(/\D/g, "").length === 6;
+  const nextLabel = [
+    "CONTINUE",
+    "EMAIL ME A CODE",
+    "VERIFY",
+    "PAY WITH UPI",
+    "SUBMIT RESERVATION",
+  ][step];
+  const busyLabel = ["", "SENDING CODE", "CHECKING", "RESERVING", "SUBMITTING"][step];
+  const payReady = isCompleteUtr(utr) && Boolean(proof);
+  const canAdvance =
+    (step !== 2 || code.replace(/\D/g, "").length === 6) && (step !== 4 || payReady);
 
   const slide = {
     enter: (dir: number) => ({
@@ -532,11 +566,18 @@ function CheckoutFlow({
                 tier={tier}
                 reservation={reservation}
                 utr={utr}
-                error={errors.utr}
+                proof={proof}
+                errors={errors}
+                busy={busy}
                 onUtrChange={(value) => {
-                  setUtr(value);
+                  setUtr(normalizeUtr(value));
                   setErrors((prev) => ({ ...prev, utr: undefined, form: undefined }));
                 }}
+                onProofChange={(next) => {
+                  setProof(next);
+                  setErrors((prev) => ({ ...prev, proof: undefined, form: undefined }));
+                }}
+                onProofError={(message) => setErrors((prev) => ({ ...prev, proof: message }))}
               />
             )}
 
@@ -604,6 +645,11 @@ function CheckoutFlow({
                 type="button"
                 onClick={handleNext}
                 disabled={busy || !canAdvance}
+                title={
+                  step === 4 && !payReady
+                    ? "Enter the 12-digit UTR and attach a screenshot first"
+                    : undefined
+                }
                 className="group relative flex items-center gap-2.5 overflow-hidden rounded-full bg-bone px-6 py-3.5 font-mono text-[10px] font-bold tracking-[0.2em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] disabled:scale-100 disabled:opacity-50 sm:px-7"
               >
                 <span
@@ -1267,25 +1313,52 @@ function StepPay({
   tier,
   reservation,
   utr,
-  error,
+  proof,
+  errors,
+  busy,
   onUtrChange,
+  onProofChange,
+  onProofError,
 }: {
   tier: PassTier;
   reservation: Reservation;
   utr: string;
-  error?: string;
+  proof: PaymentScreenshot | null;
+  errors: Errors;
+  busy: boolean;
   onUtrChange: (value: string) => void;
+  onProofChange: (proof: PaymentScreenshot | null) => void;
+  onProofError: (message: string) => void;
 }) {
   const [copiedVpa, setCopiedVpa] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const vpa = reservation.vpa ?? "";
+  const payeeName = reservation.payeeName ?? "AVION Productions";
+  const note = `UTOPIA ${reservation.reference}`;
+  const genericPayHref = reservation.upiUri ?? null;
 
   const copyVpa = async () => {
-    if (!reservation.vpa) return;
+    if (!vpa) return;
     try {
-      await navigator.clipboard.writeText(reservation.vpa);
+      await navigator.clipboard.writeText(vpa);
       setCopiedVpa(true);
       window.setTimeout(() => setCopiedVpa(false), 2000);
     } catch {
       setCopiedVpa(false);
+    }
+  };
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) {
+      onProofChange(null);
+      return;
+    }
+    try {
+      onProofChange(await compressPaymentScreenshot(file));
+    } catch (error) {
+      onProofChange(null);
+      onProofError(error instanceof Error ? error.message : "Couldn't read that screenshot.");
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
@@ -1294,66 +1367,154 @@ function StepPay({
       <StepTitle
         eyebrow="STEP 05"
         title="Pay on UPI"
-        hint="Scan from GPay / PhonePe / Paytm. Same amount the server priced — not a number this page made up."
+        hint="Pay first. Then come back with the 12-digit UTR and a screenshot. Typing the UTR does not submit the reservation."
       />
 
-      <div className="mt-6 grid gap-5 sm:grid-cols-[160px_1fr] sm:items-center">
-        <div className="mx-auto flex size-40 items-center justify-center overflow-hidden rounded-2xl bg-white p-2" style={{ boxShadow: `0 0 32px -12px ${tier.accent}` }}>
-          {reservation.upiQr ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={reservation.upiQr} alt="UPI payment QR" className="size-full object-contain" />
-          ) : (
-            <QrCode className="size-10 text-void/40" />
-          )}
-        </div>
-
-        <div className="space-y-3">
+      <div
+        className="mt-6 overflow-hidden rounded-3xl border border-white/10"
+        style={{ background: "rgba(255,255,255,0.03)" }}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-white/8 px-5 py-4">
           <div>
             <p className="font-mono text-[8px] tracking-[0.22em] text-bone/35 uppercase">PAY TO</p>
-            <p className="mt-1 text-sm text-bone">{reservation.payeeName ?? "AVION Productions"}</p>
+            <p className="mt-1 text-sm text-bone">{payeeName}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => void copyVpa()}
-            className="flex items-center gap-2 font-mono text-sm tracking-[0.04em] text-electric-100"
-          >
-            {reservation.vpa}
-            {copiedVpa ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-          </button>
-          <p className="font-display text-3xl font-light text-bone tabular-nums">
+          <p className="font-display text-xl font-light text-bone tabular-nums" style={{ color: tier.accent }}>
             {formatPrice(reservation.total)}
           </p>
-          <p className="font-mono text-[9px] tracking-[0.18em] text-bone/40 uppercase">
-            NOTE · {reservation.reference}
-          </p>
-          {reservation.upiUri && (
-            <a
-              href={reservation.upiUri}
-              className="inline-flex items-center gap-2 rounded-full border border-electric-300/40 px-4 py-2 font-mono text-[9px] tracking-[0.2em] text-electric-100 uppercase"
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-2.5">
+            <p className="min-w-0 flex-1 truncate font-mono text-[13px] text-electric-100">{vpa || "UPI ID pending"}</p>
+            <button
+              type="button"
+              onClick={() => void copyVpa()}
+              disabled={!vpa}
+              className="shrink-0 rounded-full border border-white/12 px-3 py-1.5 font-mono text-[8px] tracking-[0.18em] text-bone/70 uppercase hover:border-electric-300/50 hover:text-electric-100 disabled:opacity-40"
             >
-              OPEN UPI APP
+              {copiedVpa ? "COPIED" : "COPY VPA"}
+            </button>
+          </div>
+
+          <div
+            className="mx-auto flex size-52 items-center justify-center overflow-hidden rounded-2xl bg-white p-3"
+            style={{ boxShadow: `0 0 40px -14px ${tier.accent}` }}
+          >
+            {reservation.upiQr ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={reservation.upiQr} alt="UPI payment QR" className="size-full object-contain" />
+            ) : (
+              <QrCode className="size-10 text-void/40" />
+            )}
+          </div>
+
+          {genericPayHref && (
+            <a
+              href={genericPayHref}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 font-mono text-[10px] font-bold tracking-[0.16em] text-void uppercase"
+              style={{ background: `linear-gradient(135deg, ${tier.accent}, #f4e7c5)` }}
+            >
+              PAY {formatPrice(reservation.total)} VIA UPI APP
+              <ArrowRight className="size-3.5" />
             </a>
           )}
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {UPI_APPS.map((app) =>
+              vpa ? (
+                <a
+                  key={app.id}
+                  href={upiAppHref(app, vpa, payeeName, reservation.total, note)}
+                  className="rounded-xl px-2 py-2.5 text-center font-mono text-[9px] font-bold tracking-[0.16em] text-white uppercase"
+                  style={{ background: app.color }}
+                >
+                  {app.label}
+                </a>
+              ) : (
+                <span
+                  key={app.id}
+                  className="rounded-xl px-2 py-2.5 text-center font-mono text-[9px] font-bold tracking-[0.16em] text-white uppercase opacity-40"
+                  style={{ background: app.color }}
+                >
+                  {app.label}
+                </span>
+              ),
+            )}
+          </div>
+
+          <p className="text-center text-[11px] leading-relaxed text-bone/45">
+            Finish the payment in your UPI app. Then return here. App buttons only open payment —
+            they do not send the reservation.
+          </p>
+          <p className="text-center font-mono text-[8px] tracking-[0.18em] text-bone/35 uppercase">
+            NOTE · {reservation.reference}
+          </p>
         </div>
       </div>
 
       <label className="mt-6 block">
         <span className="mb-2 flex items-center justify-between font-mono text-[9px] tracking-[0.28em] text-bone/40 uppercase">
-          UTR / UPI REF (OPTIONAL)
-          {error && <span className="text-signal-soft normal-case">{error}</span>}
+          UPI TRANSACTION / UTR (12 DIGITS)
+          {errors.utr && <span className="text-signal-soft normal-case">{errors.utr}</span>}
         </span>
         <input
           value={utr}
           onChange={(event) => onUtrChange(event.target.value)}
-          placeholder="If the app gave you a 12-digit UTR, paste it"
-          className="w-full rounded-2xl border border-white/10 bg-white/2 px-4 py-3.5 font-mono text-sm text-bone placeholder:text-bone/25 focus:border-electric-300/60 focus:outline-none"
-          style={{ borderColor: error ? "rgba(255,59,59,0.6)" : undefined }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.preventDefault();
+          }}
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={12}
+          placeholder="e.g. 419283749102"
+          className="w-full rounded-2xl border border-white/10 bg-white/2 px-4 py-3.5 font-mono text-sm tracking-[0.18em] text-bone placeholder:text-bone/25 focus:border-electric-300/60 focus:outline-none"
+          style={{ borderColor: errors.utr ? "rgba(255,59,59,0.6)" : undefined }}
         />
       </label>
 
-      <p className="mt-4 text-[11px] leading-relaxed text-bone/45" style={{ color: undefined }}>
-        Hitting &ldquo;I&apos;ve paid&rdquo; doesn&apos;t mint the pass. An admin checks the credit,
-        then we email a QR with your name and a 6-digit door code. Fake UTRs just get you rejected.
+      <div className="mt-4">
+        <span className="mb-2 flex items-center justify-between font-mono text-[9px] tracking-[0.28em] text-bone/40 uppercase">
+          PAYMENT SCREENSHOT
+          {errors.proof && <span className="text-signal-soft normal-case">{errors.proof}</span>}
+        </span>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          disabled={busy}
+          onChange={(event) => void onFile(event.target.files?.[0])}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-white/2 px-4 py-3.5 text-left transition-colors hover:border-electric-300/40 disabled:opacity-50"
+          style={{ borderColor: errors.proof ? "rgba(255,59,59,0.6)" : undefined }}
+        >
+          {proof ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={proof.dataUrl} alt="" className="size-12 rounded-lg object-cover" />
+          ) : (
+            <span className="flex size-12 items-center justify-center rounded-lg border border-white/10 text-bone/40">
+              <Upload className="size-4" />
+            </span>
+          )}
+          <span className="min-w-0">
+            <span className="block text-[13px] text-bone">
+              {proof ? proof.name : "Choose screenshot"}
+            </span>
+            <span className="block text-[11px] text-bone/40">
+              {proof ? "Tap to replace" : "JPG, PNG, or WebP of the paid screen"}
+            </span>
+          </span>
+        </button>
+      </div>
+
+      <p className="mt-4 text-[11px] leading-relaxed text-bone/45">
+        Submit stays locked until the UTR is 12 digits and a screenshot is attached.
+        An admin still has to confirm the credit before a pass is emailed.
       </p>
     </div>
   );

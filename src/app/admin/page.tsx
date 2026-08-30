@@ -361,6 +361,7 @@ function OrderRow({
               <span>PASS {order.passCode}</span>
             )}
             {order.utr && <span>UTR {order.utr}</span>}
+            {order.paymentProofName && <span>PROOF {order.paymentProofName}</span>}
             {order.status === "rejected" && (
               <span>
                 REJECTED{order.decidedBy ? ` BY ${order.decidedBy}` : ""}
@@ -368,6 +369,22 @@ function OrderRow({
               </span>
             )}
           </div>
+
+          {order.paymentProofData && (
+            <a
+              href={order.paymentProofData}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-block overflow-hidden rounded-xl border border-white/10"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={order.paymentProofData}
+                alt="Payment screenshot"
+                className="h-28 w-28 object-cover"
+              />
+            </a>
+          )}
         </div>
 
         <div className="flex flex-col items-start gap-3 sm:items-end">

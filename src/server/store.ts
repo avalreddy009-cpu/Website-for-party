@@ -37,6 +37,9 @@ export type Order = {
   paidAt?: number;
   paymentRef?: string;
   utr?: string;
+  paymentProofName?: string;
+  paymentProofMime?: string;
+  paymentProofData?: string;
   paidSubmittedAt?: number;
   rejectedAt?: number;
   rejectionReason?: string;
@@ -379,7 +382,7 @@ export type PaymentProofResult =
 export function attachPaymentProof(
   referenceCode: string,
   email: string,
-  utr?: string,
+  proof: { utr: string; proofName: string; proofMime: string; proofData: string },
 ): PaymentProofResult {
   const order = getOrderByReference(referenceCode);
   if (!order) return { ok: false, reason: "not-found" };
@@ -388,10 +391,11 @@ export function attachPaymentProof(
     return { ok: false, reason: "already-decided" };
   }
   order.paidSubmittedAt = Date.now();
-  if (utr) {
-    order.utr = utr;
-    order.paymentRef = utr;
-  }
+  order.utr = proof.utr;
+  order.paymentRef = proof.utr;
+  order.paymentProofName = proof.proofName;
+  order.paymentProofMime = proof.proofMime;
+  order.paymentProofData = proof.proofData;
   persist();
   return { ok: true, order };
 }
