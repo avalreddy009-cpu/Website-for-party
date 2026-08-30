@@ -6,8 +6,7 @@ import type { PassId } from "@/lib/passes";
 import { derivePassDigits } from "./pass-code";
 import { getPhraseHashes } from "./phrase";
 
-// Mint (or load) CMS/door phrases on first import so `next dev` prints them
-// before anyone hits /admin.
+// Resolve CMS/door phrase hashes on boot (env override or first-deploy fallback).
 getPhraseHashes();
 
 /**

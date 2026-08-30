@@ -63,8 +63,9 @@ Copy `.env.example` to `.env.local`. Everything is optional in development;
 | `CMS_PHRASE` / `DOOR_PHRASE` | 12 BIP39 English words (hashed in memory, never logged) |
 | `CMS_PHRASE_HASH` / `DOOR_PHRASE_HASH` | Optional precomputed hashes instead of plaintext |
 
-In development, if the phrases aren't set, the server mints a pair, writes them
-to gitignored `.data/dev-phrases.json`, and prints them to the console.
+If `CMS_PHRASE` / `DOOR_PHRASE` are unset, `/admin` and `/door` use the
+first-deploy hashes baked into `src/server/phrase.ts` (plaintext is not in git).
+Set the env vars when you rotate.
 
 ## The purchase flow
 

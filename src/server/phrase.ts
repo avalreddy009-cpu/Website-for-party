@@ -1,20 +1,32 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { BIP39_ENGLISH } from "./bip39-english";
 
 /**
  * 12-word unlock phrases for the CMS and the door scanner. Same shape as a
  * crypto wallet seed — 12 BIP39 English words — but they are *not* keys and
- * they do not control money. We hash them with AUTH_SECRET and only ever
- * compare hashes.
+ * they do not control money. We store hashes only.
+ *
+ * Env overrides (CMS_PHRASE / DOOR_PHRASE or *_HASH) win. If those are empty,
+ * we fall back to the first-deploy hashes below so /admin and /door work on
+ * Vercel without a dashboard trip. Rotate by setting the env vars.
  */
 
 export type PhraseRole = "cms" | "door";
 
 const WORD_SET = new Set<string>(BIP39_ENGLISH);
-const DEV_FILE = join(process.cwd(), ".data", "dev-phrases.json");
+
+/** HMAC key for phrase hashes — independent of AUTH_SECRET so a later secret rotation does not lock staff out. */
+const PHRASE_PEPPER = "utopia-phrase-unlock-v1";
+
+/**
+ * First-deploy hashes (plaintext is not in git). Override with CMS_PHRASE /
+ * DOOR_PHRASE when you rotate.
+ */
+const BUILTIN_HASHES = {
+  cmsHash: "4d531d7e3fb30416c834395b770cb93abdd298a400b26d0dce8a887d51f52508",
+  doorHash: "d7e58951544db15011fbd62ef895a19329d2074f1d1887bc8b1bf00875ddeb54",
+} as const;
 
 export function normalizePhrase(input: string): string {
   return input
@@ -32,22 +44,8 @@ export function parsePhraseWords(input: string): string[] | null {
   return words;
 }
 
-export function generatePhrase(): string {
-  const words: string[] = [];
-  for (let i = 0; i < 12; i += 1) {
-    // 2048 is 2^11, so 2 bytes is plenty of uniform index space.
-    const index = randomBytes(2).readUInt16BE(0) % BIP39_ENGLISH.length;
-    words.push(BIP39_ENGLISH[index]);
-  }
-  return words.join(" ");
-}
-
-function secret(): string {
-  return process.env.AUTH_SECRET ?? "utopia-dev-secret-change-me";
-}
-
 export function hashPhrase(phrase: string): string {
-  return createHmac("sha256", secret()).update(`phrase:${normalizePhrase(phrase)}`).digest("hex");
+  return createHmac("sha256", PHRASE_PEPPER).update(`phrase:${normalizePhrase(phrase)}`).digest("hex");
 }
 
 function hashesEqual(a: string, b: string): boolean {
@@ -56,92 +54,21 @@ function hashesEqual(a: string, b: string): boolean {
   return bufA.length === bufB.length && bufA.length > 0 && timingSafeEqual(bufA, bufB);
 }
 
-type DevPhrases = { cms?: string; door?: string };
-
-function loadDevPhrases(): DevPhrases {
-  try {
-    if (existsSync(DEV_FILE)) {
-      return JSON.parse(readFileSync(DEV_FILE, "utf8")) as DevPhrases;
-    }
-  } catch {
-    // Ignore corrupt file; we'll regenerate.
-  }
-  return {};
-}
-
-function saveDevPhrases(phrases: DevPhrases): void {
-  try {
-    mkdirSync(dirname(DEV_FILE), { recursive: true });
-    writeFileSync(DEV_FILE, JSON.stringify(phrases, null, 2), "utf8");
-  } catch (error) {
-    console.warn("[utopia] Could not persist generated phrases to .data/", error);
-  }
-}
-
 type HashSet = { cmsHash: string; doorHash: string };
 
 let cache: HashSet | null = null;
-let announced = false;
 
-/**
- * Resolve the stored hashes. Production only accepts env vars (plaintext
- * phrase or precomputed hash). Development will mint a pair of phrases, write
- * them to gitignored `.data/dev-phrases.json`, and print them to the console.
- */
 export function getPhraseHashes(): HashSet {
   if (cache) return cache;
 
-  let cmsHash =
+  const cmsHash =
     process.env.CMS_PHRASE_HASH?.trim() ||
-    (process.env.CMS_PHRASE ? hashPhrase(process.env.CMS_PHRASE) : "");
-  let doorHash =
+    (process.env.CMS_PHRASE ? hashPhrase(process.env.CMS_PHRASE) : "") ||
+    BUILTIN_HASHES.cmsHash;
+  const doorHash =
     process.env.DOOR_PHRASE_HASH?.trim() ||
-    (process.env.DOOR_PHRASE ? hashPhrase(process.env.DOOR_PHRASE) : "");
-
-  if (process.env.NODE_ENV === "production") {
-    cache = { cmsHash, doorHash };
-    if (
-      !announced &&
-      (!cmsHash || !doorHash) &&
-      process.env.NEXT_PHASE !== "phase-production-build"
-    ) {
-      announced = true;
-      console.error(
-        "[utopia] Set CMS_PHRASE and DOOR_PHRASE (or *_PHRASE_HASH) in the environment. CMS and door login stay locked until you do.",
-      );
-    }
-    return cache;
-  }
-
-  const stored = loadDevPhrases();
-  let dirty = false;
-
-  if (!cmsHash) {
-    if (!stored.cms || parsePhraseWords(stored.cms) === null) {
-      stored.cms = generatePhrase();
-      dirty = true;
-    }
-    cmsHash = hashPhrase(stored.cms);
-  }
-  if (!doorHash) {
-    if (!stored.door || parsePhraseWords(stored.door) === null) {
-      stored.door = generatePhrase();
-      dirty = true;
-    }
-    doorHash = hashPhrase(stored.door);
-  }
-
-  if (dirty) saveDevPhrases(stored);
-
-  if (!announced) {
-    announced = true;
-    if (stored.cms && !process.env.CMS_PHRASE && !process.env.CMS_PHRASE_HASH) {
-      console.info(`\n[utopia] CMS 12-word phrase (dev only, not in git):\n  ${stored.cms}\n`);
-    }
-    if (stored.door && !process.env.DOOR_PHRASE && !process.env.DOOR_PHRASE_HASH) {
-      console.info(`\n[utopia] DOOR 12-word phrase (dev only, not in git):\n  ${stored.door}\n`);
-    }
-  }
+    (process.env.DOOR_PHRASE ? hashPhrase(process.env.DOOR_PHRASE) : "") ||
+    BUILTIN_HASHES.doorHash;
 
   cache = { cmsHash, doorHash };
   return cache;
