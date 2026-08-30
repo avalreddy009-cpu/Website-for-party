@@ -1,109 +1,164 @@
 # UTOPIA — by AVION Productions
 
-A high-energy, animated landing page for **UTOPIA**, an underground day rave by
-AVION Productions. September 27th, 12:00 PM – 5:00 PM.
+Landing page and pass-reservation flow for **UTOPIA**, a dry day party by AVION
+Productions.
 
-Deep blacks, electric blue glows, stark white grunge typography, glassmorphism
-overlays, and a surreal poster/mask motif drifting behind the type.
+> **Sunday 27 September · 12:00 PM – 5:00 PM**
+> Ouzo Club and Kitchen, Hyderabad · [Directions](https://maps.app.goo.gl/2RwwfkFsRRg3G3rJ6)
+> Unlimited food, unlimited mocktails, zero alcohol.
+
+Two passes: **Early Bird ₹1,249** and **VIP ₹1,549**.
 
 ## Stack
 
-| Concern       | Choice                                        |
-| ------------- | --------------------------------------------- |
-| Framework     | Next.js (App Router) + React + TypeScript     |
-| Styling       | Tailwind CSS v4 (CSS-first `@theme` tokens)   |
-| Animation     | Framer Motion                                 |
-| Icons         | Lucide React (brand marks hand-drawn locally) |
-| Type          | Anton (display), Space Grotesk, JetBrains Mono |
+| Concern     | Choice                                                        |
+| ----------- | ------------------------------------------------------------- |
+| Framework   | Next.js (App Router) + React + TypeScript                     |
+| Styling     | Tailwind CSS v4 (CSS-first `@theme` tokens)                    |
+| Animation   | Framer Motion                                                 |
+| Icons       | Lucide React (brand marks hand-drawn in `ui/SocialIcons.tsx`)  |
+| Validation  | Zod, shared between the browser and the API routes            |
+| Email       | Resend HTTP API or any SMTP server via Nodemailer             |
+| Type        | Bodoni Moda (display), Space Grotesk (UI), JetBrains Mono      |
 
-## Setup from scratch
-
-If you are recreating this project in an empty directory, these are the exact
-commands:
-
-```bash
-# 1. Scaffold the app (App Router + TypeScript + Tailwind + ESLint + src dir)
-npx create-next-app@latest utopia-avion-landing \
-  --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm
-
-cd utopia-avion-landing
-
-# 2. Animation + icon packages
-npm install framer-motion lucide-react
-
-# 3. Run it
-npm run dev            # http://localhost:3000
-```
-
-## Running this repo
+## Run it
 
 ```bash
 npm install
-npm run dev            # dev server on http://localhost:3000
+npm run dev            # http://localhost:3000
 npm run build          # production build
 npm start              # serve the production build
 npm run lint           # eslint
 npx tsc --noEmit       # type-check
 ```
 
+No environment variables are needed to develop. Without mail credentials the
+verification code is printed to the server console **and** shown in the
+checkout modal, so the whole purchase flow is clickable out of the box.
+
+## Setup from scratch
+
+```bash
+npx create-next-app@latest utopia --typescript --tailwind --eslint --app \
+  --src-dir --import-alias "@/*" --use-npm
+cd utopia
+npm install framer-motion lucide-react zod nodemailer
+npm install -D @types/nodemailer
+npm run dev
+```
+
+## Configuration
+
+Copy `.env.example` to `.env.local`. Everything is optional in development;
+`AUTH_SECRET` is **required** in production.
+
+| Variable                            | Purpose                                              |
+| ----------------------------------- | ---------------------------------------------------- |
+| `AUTH_SECRET`                       | Signs verification tokens, hashes the 6-digit codes  |
+| `RESEND_API_KEY`                    | Send mail through Resend                             |
+| `SMTP_URL`                          | Send mail through any SMTP server instead            |
+| `MAIL_FROM` / `MAIL_REPLY_TO`       | Sender identity                                      |
+| `NEXT_PUBLIC_SITE_URL`              | Absolute URL for Open Graph images                   |
+
+## The purchase flow
+
+Five steps, `PASS → DETAILS → VERIFY → CONFIRM → DONE`:
+
+1. **PASS** — pick a tier, set quantity (max 8), live subtotal.
+2. **DETAILS** — name, email, phone. Validated by the same Zod schema the API
+   uses, so client and server can never disagree about what's acceptable.
+3. **VERIFY** — `POST /api/passes/verify` emails a 6-digit code. The six-box
+   input supports paste, arrow keys, and backspace-across-boxes; a rejected
+   code clears itself so retrying is just typing again.
+4. **CONFIRM** — order review, 5% booking fee, dry-event acknowledgement.
+5. **DONE** — reservation reference, hold countdown, confirmation email sent.
+
+### API
+
+| Route                            | Does                                                        |
+| -------------------------------- | ----------------------------------------------------------- |
+| `POST /api/passes/verify`        | Issues + emails a 6-digit code (45s resend cooldown)        |
+| `POST /api/passes/verify/confirm`| Exchanges a correct code for a signed, 30-minute HMAC token |
+| `POST /api/passes/reserve`       | Creates the reservation and emails the receipt              |
+
+Hardening already in place:
+
+- Codes are stored only as SHA-256 hashes salted with `AUTH_SECRET`, compared
+  in constant time, expire after 10 minutes, and lock after 5 wrong attempts.
+- Verification tokens are HMAC-signed and bound to the email address, so a
+  reservation can't be created for an address that wasn't verified.
+- **Prices are recomputed server-side** in `lib/pricing.ts` — a tampered client
+  payload cannot change what gets charged.
+- Fixed-window rate limits per IP on all three routes, plus a per-address send
+  cap.
+
+### Storage
+
+`src/server/store.ts` is the only module that touches persistence: orders and
+verifications live in memory and are mirrored to `.data/utopia.json`. Good for
+local development and a single Node process; **replace it with a real database
+before taking money.** It already exposes `listOrders()`, `getOrderByReference()`
+and `countPassesSold()` for the admin panel.
+
+### Not done yet
+
+Payment gateway and admin panel. `CheckoutFlow` deliberately stops at
+`status: "reserved"` — wire the gateway into `POST /api/passes/reserve`'s
+response and flip the order to `paid` on webhook.
+
 ## Structure
 
 ```
 src/
 ├── app/
-│   ├── globals.css        # design tokens, keyframes, glass/glow/grain utilities
-│   ├── layout.tsx         # fonts + metadata
-│   └── page.tsx           # composition root: loader → hero → info → passes → footer
+│   ├── api/passes/…           # verify, verify/confirm, reserve
+│   ├── globals.css            # design tokens, keyframes, glass/glow/film utils
+│   ├── layout.tsx             # fonts + metadata
+│   └── page.tsx               # composition root
 ├── components/
-│   ├── BackgroundFX.tsx   # ambient glows, mask parallax, grid, scanlines, grain
-│   ├── MaskMotif.tsx      # the surreal poster mask (hand-authored SVG)
-│   ├── Preloader.tsx      # custom loading sequence + shutter reveal
-│   ├── Navbar.tsx         # scroll-triggered glass nav
-│   ├── Hero.tsx           # grunge headline, chromatic ghost layers, magnetic CTA
-│   ├── EventInfo.tsx      # date/time/venue dossier + countdown + venue teaser
-│   ├── Countdown.tsx      # live countdown with rolling digits
-│   ├── PassTiers.tsx      # tier grid
-│   ├── PassCard.tsx       # 3D tilt + card flip revealing perks
-│   ├── CheckoutModal.tsx  # 4-step checkout workflow
-│   ├── Footer.tsx         # minimal underground footer
-│   ├── Marquee.tsx        # seamless ticker strips
-│   └── ui/                # Reveal/SplitText, NeonButton, brand glyphs
-└── lib/
-    ├── event.ts           # event copy, date resolution, price formatting
-    ├── passes.ts          # pass tiers, perks, pricing, booking fee
-    └── useNow.ts          # shared 1s clock (external store, hydration-safe)
+│   ├── BackgroundFX.tsx       # room tone: glows, grid, scanlines, grain
+│   ├── Preloader.tsx          # loading sequence + shutter reveal
+│   ├── Hero.tsx               # headline + the real poster
+│   ├── StoryBand.tsx          # manifesto, teaser title card, AVION band
+│   ├── EventInfo.tsx          # date/time/venue + maps link + countdown
+│   ├── Countdown.tsx          # live countdown, rolling digits
+│   ├── PassTiers.tsx          # tier grid
+│   ├── PassCard.tsx           # 3D tilt + flip revealing everything included
+│   ├── HouseRules.tsx         # the no-alcohol rules, expandable
+│   ├── CheckoutModal.tsx      # the five-step flow
+│   ├── Footer.tsx, Marquee.tsx, Navbar.tsx
+│   └── ui/                    # Reveal/SplitText, NeonButton, brand glyphs
+├── lib/
+│   ├── event.ts               # every piece of event copy and the date logic
+│   ├── passes.ts              # the two tiers, perks, pricing
+│   ├── pricing.ts             # shared money maths
+│   ├── validation.ts          # Zod schemas + error flattening
+│   └── useNow.ts              # shared 1s clock (external store, SSR-safe)
+└── server/
+    ├── store.ts               # orders + verification codes + tokens
+    ├── mailer.ts              # Resend / SMTP / dev console, with templates
+    └── rate-limit.ts          # per-IP fixed window
 ```
 
-## Editing the content
+## Editing content
 
-Everything user-facing lives in two files:
+Almost all copy lives in `src/lib/event.ts` and `src/lib/passes.ts` — names,
+prices, perks, venue, maps link, policy lines. Section prose sits inline in its
+own component so it reads in context rather than through a key.
 
-- `src/lib/event.ts` — name, host, tagline, date/time labels, venue teaser,
-  contact and social links, plus `getEventDate()` and `formatPrice()`.
-- `src/lib/passes.ts` — the three tiers, their perks, pricing, accent colours,
-  and the booking fee rate.
+The countdown targets the **next** 27 September at noon, so it stays live year
+over year instead of freezing at zero.
 
-The countdown targets the **next** 27 September at 12:00 local time, so the
-timer stays live year over year instead of freezing at zero.
+## Media
 
-## Checkout workflow
-
-`CheckoutModal` runs a four-step flow — **PASS → DETAILS → CONFIRM → DONE**:
-
-1. **PASS** — switch tier, step the quantity (max 10), live subtotal.
-2. **DETAILS** — name, email, phone with inline validation and shake-on-error.
-3. **CONFIRM** — order review, subtotal + 7% booking fee, terms acknowledgement.
-4. **DONE** — simulated payment round-trip, then a ticket stub with a generated
-   order reference you can copy.
-
-The flow is remounted per checkout session (keyed by `sessionId`), so each open
-starts clean. Payment is stubbed in `CheckoutFlow.handleNext` — replace the
-`setTimeout` with your payment provider call and post the order to your API.
+`public/media/` is cut from the real AVION teaser and the released poster with
+ffmpeg — letterboxing removed, and crops chosen so the video's own titles never
+sit under our text. `poster.jpg` also has the Instagram share glyph patched out.
 
 ## Accessibility & motion
 
 - Every animation respects `prefers-reduced-motion`.
 - The modal is a labelled dialog with Escape-to-close, a Tab focus trap, and
-  body scroll lock.
-- Card flips, quantity steppers, and tier selection are real buttons with
-  `aria-pressed` / `aria-label` where needed.
+  body scroll lock; it cannot be dismissed mid-request.
+- Card flips, quantity steppers, tier selection and the rules accordion are all
+  real buttons with `aria-pressed` / `aria-expanded` / `aria-label`.
