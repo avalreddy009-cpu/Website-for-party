@@ -136,18 +136,17 @@ export function EventInfo() {
           </Reveal>
 
           <Reveal delay={0.12} distance={50}>
-            <div className="relative overflow-hidden rounded-3xl border border-white/10">
+            <div className="relative aspect-[16/10] overflow-hidden rounded-3xl border border-white/10 sm:aspect-[16/9]">
               <Image
-                src="/media/crowd-pink.jpg"
-                alt=""
-                width={1600}
-                height={175}
+                src="/media/room-last.jpg"
+                alt="A packed dance floor — haze, lasers, the room full"
+                fill
                 sizes="(max-width: 1024px) 92vw, 560px"
-                className="h-32 w-full object-cover object-center opacity-80 sm:h-40"
+                className="object-cover object-[50%_42%]"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#05050c] via-[#05050c]/35 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#05050c] via-[#05050c]/20 to-transparent" />
               <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
-                <p className="font-mono text-[9px] tracking-[0.28em] text-bone/50 uppercase">
+                <p className="font-mono text-[9px] tracking-[0.28em] text-bone/55 uppercase">
                   LAST ROOM WE FILLED
                 </p>
                 <p className="font-display mt-1.5 text-lg text-bone sm:text-xl">
