@@ -117,6 +117,8 @@ if (!Array.isArray(db.scans)) db.scans = [];
 
 let persistWarned = false;
 
+let flushPromise: Promise<void> = Promise.resolve();
+
 function persist(): void {
   try {
     mkdirSync(dirname(DATA_FILE), { recursive: true });
@@ -129,12 +131,19 @@ function persist(): void {
       );
     }
   }
-  void persistRemote();
+  flushPromise = persistRemote();
+}
+
+export async function flushStore(): Promise<void> {
+  await flushPromise;
+}
+
+export function isDurableStore(): boolean {
+  return Boolean(upstashAuth());
 }
 
 const UPSTASH_KEY = "utopia:db:v1";
 const globalHydrate = globalThis as typeof globalThis & {
-  __utopiaRemoteHydrated?: boolean;
   __utopiaHydrate?: Promise<void>;
 };
 
@@ -192,14 +201,10 @@ async function persistRemote(): Promise<void> {
 }
 
 export async function hydrateStore(): Promise<void> {
-  if (globalHydrate.__utopiaRemoteHydrated) return;
+  const auth = upstashAuth();
+  if (!auth) return;
   if (globalHydrate.__utopiaHydrate) {
     await globalHydrate.__utopiaHydrate;
-    return;
-  }
-  const auth = upstashAuth();
-  if (!auth) {
-    globalHydrate.__utopiaRemoteHydrated = true;
     return;
   }
   globalHydrate.__utopiaHydrate = (async () => {
@@ -215,7 +220,6 @@ export async function hydrateStore(): Promise<void> {
     } catch (error) {
       console.error("[utopia] remote store read failed", error);
     } finally {
-      globalHydrate.__utopiaRemoteHydrated = true;
       globalHydrate.__utopiaHydrate = undefined;
     }
   })();

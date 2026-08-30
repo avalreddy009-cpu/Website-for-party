@@ -5,7 +5,7 @@ import { fieldErrors, rejectOrderSchema } from "@/lib/validation";
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassRejected } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { hydrateStore, rejectOrder } from "@/server/store";
+import { flushStore, hydrateStore, rejectOrder } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -61,5 +61,6 @@ export async function POST(
     console.error("[utopia] rejection email failed", error);
   }
 
+  await flushStore();
   return NextResponse.json({ ok: true, order: result.order });
 }

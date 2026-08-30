@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { fieldErrors, phoneSchema } from "@/lib/validation";
 import { getBuyerSession } from "@/server/admin-session";
 import { upsertPassWallet } from "@/server/pass-wallet";
-import { hydrateStore, recoverPaidPass } from "@/server/store";
+import { flushStore, hydrateStore, recoverPaidPass } from "@/server/store";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -67,5 +67,6 @@ export async function POST(request: Request) {
   }
 
   await upsertPassWallet(session.email, result.order);
+  await flushStore();
   return NextResponse.json({ ok: true, reference: result.order.reference });
 }

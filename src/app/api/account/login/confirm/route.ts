@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { confirmCodeSchema, fieldErrors } from "@/lib/validation";
 import { BUYER_SESSION_COOKIE } from "@/server/admin-auth";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { checkCode, hydrateStore, signBuyerSession } from "@/server/store";
+import { checkCode, flushStore, hydrateStore, signBuyerSession } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -62,5 +62,6 @@ export async function POST(request: Request) {
     maxAge: SESSION_MAX_AGE_SECONDS,
   });
 
+  await flushStore();
   return NextResponse.json({ ok: true, email: parsed.data.email });
 }

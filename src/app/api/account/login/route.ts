@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { emailLoginSchema, fieldErrors } from "@/lib/validation";
 import { isDevMailer, sendLoginCode } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { hydrateStore, issueCode } from "@/server/store";
+import { flushStore, hydrateStore, issueCode } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -55,6 +55,7 @@ export async function POST(request: Request) {
     );
   }
 
+  await flushStore();
   return NextResponse.json({
     ok: true,
     expiresAt: issued.expiresAt,

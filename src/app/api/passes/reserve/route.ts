@@ -8,7 +8,7 @@ import { sendOrderConfirmation } from "@/server/mailer";
 import { qrDataUrl } from "@/server/pass-code";
 import { clientKey, rateLimit } from "@/server/rate-limit";
 import { upsertPassWallet } from "@/server/pass-wallet";
-import { createOrder, hydrateStore, verifyToken } from "@/server/store";
+import { createOrder, flushStore, hydrateStore, verifyToken } from "@/server/store";
 import { buildUpiUri, getUpiConfig } from "@/server/upi";
 
 export const runtime = "nodejs";
@@ -93,6 +93,7 @@ export async function POST(request: Request) {
   }
 
   await upsertPassWallet(email, order);
+  await flushStore();
 
   return NextResponse.json({
     ok: true,

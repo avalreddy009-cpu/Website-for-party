@@ -4,7 +4,7 @@ import { getPassById } from "@/lib/passes";
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassApproved } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { approveOrder, hydrateStore } from "@/server/store";
+import { approveOrder, flushStore, hydrateStore } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -48,5 +48,6 @@ export async function POST(
     console.error("[utopia] approval email failed", error);
   }
 
+  await flushStore();
   return NextResponse.json({ ok: true, order: result.order });
 }

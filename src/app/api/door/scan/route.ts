@@ -4,7 +4,7 @@ import { fieldErrors, scanPayloadSchema } from "@/lib/validation";
 import { getDoorSession } from "@/server/admin-session";
 import { sendEntryNotice } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { hydrateStore, listScans, scanPass } from "@/server/store";
+import { flushStore, hydrateStore, listScans, scanPass } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
     }
   }
 
+  await flushStore();
   return NextResponse.json({
     ok: result === "admitted" || result === "already-in",
     result,

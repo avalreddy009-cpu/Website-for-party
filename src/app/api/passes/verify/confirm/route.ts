@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { confirmCodeSchema, fieldErrors } from "@/lib/validation";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { checkCode, hydrateStore } from "@/server/store";
+import { checkCode, flushStore, hydrateStore } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -49,5 +49,6 @@ export async function POST(request: Request) {
     );
   }
 
+  await flushStore();
   return NextResponse.json({ ok: true, verificationToken: result.token });
 }

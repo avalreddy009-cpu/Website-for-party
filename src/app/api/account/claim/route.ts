@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { BUYER_SESSION_COOKIE } from "@/server/admin-auth";
 import { upsertPassWallet } from "@/server/pass-wallet";
-import { hydrateStore, importWalletPass, signBuyerSession, verifyPassClaim } from "@/server/store";
+import { flushStore, hydrateStore, importWalletPass, signBuyerSession, verifyPassClaim } from "@/server/store";
 import { getBuyerSession } from "@/server/admin-session";
 
 export const runtime = "nodejs";
@@ -46,5 +46,6 @@ export async function POST(request: Request) {
     });
   }
 
+  await flushStore();
   return NextResponse.json({ ok: true, email: claim.email, reference: order.reference });
 }
