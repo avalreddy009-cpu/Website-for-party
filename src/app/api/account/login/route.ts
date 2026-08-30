@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { TEST_USER, isTestUserEmail } from "@/lib/test-user";
 import { emailLoginSchema, fieldErrors } from "@/lib/validation";
 import { isDevMailer, sendLoginCode } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
@@ -31,14 +30,6 @@ export async function POST(request: Request) {
       { error: "That email doesn't look right.", fields: fieldErrors(parsed.error) },
       { status: 422 },
     );
-  }
-
-  if (isTestUserEmail(parsed.data.email)) {
-    return NextResponse.json({
-      ok: true,
-      resendAfterSeconds: 0,
-      demoCode: TEST_USER.code,
-    });
   }
 
   const issued = issueCode(parsed.data.email);

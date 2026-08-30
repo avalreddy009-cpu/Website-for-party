@@ -8,7 +8,6 @@ import { ArrowRight, Mail, RefreshCw, ShieldCheck } from "lucide-react";
 import { BackgroundFX } from "@/components/BackgroundFX";
 import { Navbar } from "@/components/Navbar";
 import { EVENT } from "@/lib/event";
-import { TEST_USER } from "@/lib/test-user";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -54,7 +53,6 @@ export default function LoginPage() {
         error?: string;
         fields?: { email?: string };
         devCode?: string;
-        demoCode?: string;
         resendAfterSeconds?: number;
       };
       if (!response.ok) {
@@ -62,7 +60,7 @@ export default function LoginPage() {
         setBusy(false);
         return;
       }
-      setDevCode(data.demoCode ?? data.devCode ?? null);
+      setDevCode(data.devCode ?? null);
       setResendIn(data.resendAfterSeconds ?? 45);
       setCode("");
       setStep("code");
@@ -252,8 +250,8 @@ export default function LoginPage() {
           <div className="relative mt-7 flex items-start gap-2.5 border-t border-white/8 pt-5">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-bone/30" />
             <p className="text-[11px] leading-relaxed text-bone/35">
-              Demo account: {TEST_USER.email} · code {TEST_USER.code}. Buying a real pass?
-              Start from the homepage.
+              Buying a pass? Start from the homepage. This page only shows reservations already
+              tied to your inbox.
             </p>
           </div>
         </motion.div>
