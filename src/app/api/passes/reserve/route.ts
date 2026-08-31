@@ -8,7 +8,13 @@ import { sendOrderConfirmation } from "@/server/mailer";
 import { qrDataUrl } from "@/server/pass-code";
 import { clientKey, rateLimit } from "@/server/rate-limit";
 import { upsertPassWallet } from "@/server/pass-wallet";
-import { createOrder, flushStore, hydrateStore, verifyToken } from "@/server/store";
+import {
+  canReserveWithToken,
+  createOrder,
+  flushStore,
+  hydrateStore,
+  markEmailReserved,
+} from "@/server/store";
 import { buildUpiUri, getUpiConfig } from "@/server/upi";
 
 export const runtime = "nodejs";
@@ -45,9 +51,9 @@ export async function POST(request: Request) {
 
   const { name, email, phone, passId, quantity, verificationToken } = parsed.data;
 
-  if (!verifyToken(verificationToken, email)) {
+  if (!canReserveWithToken(verificationToken, email)) {
     return NextResponse.json(
-      { error: "That email verification expired. Verify again." },
+      { error: "Verify your email again to book." },
       { status: 401 },
     );
   }
@@ -93,6 +99,7 @@ export async function POST(request: Request) {
   }
 
   await upsertPassWallet(email, order);
+  markEmailReserved(email);
   await flushStore();
 
   return NextResponse.json({

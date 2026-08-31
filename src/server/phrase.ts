@@ -64,11 +64,11 @@ export function getPhraseHashes(): HashSet {
   const cmsHash =
     process.env.CMS_PHRASE_HASH?.trim() ||
     (process.env.CMS_PHRASE ? hashPhrase(process.env.CMS_PHRASE) : "") ||
-    BUILTIN_HASHES.cmsHash;
+    (process.env.NODE_ENV === "production" ? "" : BUILTIN_HASHES.cmsHash);
   const doorHash =
     process.env.DOOR_PHRASE_HASH?.trim() ||
     (process.env.DOOR_PHRASE ? hashPhrase(process.env.DOOR_PHRASE) : "") ||
-    BUILTIN_HASHES.doorHash;
+    (process.env.NODE_ENV === "production" ? "" : BUILTIN_HASHES.doorHash);
 
   cache = { cmsHash, doorHash };
   return cache;

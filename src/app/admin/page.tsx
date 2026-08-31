@@ -142,6 +142,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const loadProof = async (id: string) => {
+    try {
+      const response = await fetch(`/api/admin/orders/${id}/proof`);
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "Couldn't open that screenshot.");
+        return;
+      }
+      setProof({ src: data.src, name: data.name });
+    } catch {
+      setError("No connection. Try again.");
+    }
+  };
+
   return (
     <div className="flex-1">
       <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
@@ -265,12 +279,8 @@ export default function AdminDashboard() {
             onCancelTransfer={() => setTransferringId(null)}
             onConfirmTransfer={() => void movePass(order.id)}
             onViewProof={
-              order.paymentProofData
-                ? () =>
-                    setProof({
-                      src: order.paymentProofData as string,
-                      name: order.paymentProofName,
-                    })
+              order.hasPaymentProof || order.paymentProofData
+                ? () => void loadProof(order.id)
                 : undefined
             }
           />
@@ -491,21 +501,13 @@ function OrderRow({
             )}
           </div>
 
-          {order.paymentProofData && onViewProof && (
+          {(order.hasPaymentProof || order.paymentProofData) && onViewProof && (
             <button
               type="button"
               onClick={onViewProof}
-              className="mt-4 w-full max-w-md overflow-hidden rounded-2xl border border-white/12 bg-white p-2 text-left"
+              className="mt-4 rounded-full border border-white/12 px-3.5 py-2 font-mono text-[9px] tracking-[0.18em] text-bone/55 uppercase transition-colors hover:border-electric-300/50 hover:text-electric-200"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={order.paymentProofData}
-                alt={order.paymentProofName ?? "Payment screenshot"}
-                className="max-h-72 w-full object-contain"
-              />
-              <span className="mt-2 block font-mono text-[8px] tracking-[0.18em] text-void/45 uppercase">
-                TAP TO VIEW FULL
-              </span>
+              VIEW UPI SCREENSHOT
             </button>
           )}
         </div>

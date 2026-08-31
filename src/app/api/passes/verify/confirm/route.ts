@@ -34,17 +34,8 @@ export async function POST(request: Request) {
 
   const result = checkCode(parsed.data.email, parsed.data.code);
   if (!result.ok) {
-    const messages: Record<typeof result.reason, string> = {
-      unknown: "Ask for a fresh code first.",
-      expired: "That code expired. Send yourself a new one.",
-      locked: "Too many wrong codes. Request a new one.",
-      mismatch:
-        result.attemptsLeft > 0
-          ? `Not that one. ${result.attemptsLeft} ${result.attemptsLeft === 1 ? "try" : "tries"} left.`
-          : "Too many wrong codes. Request a new one.",
-    };
     return NextResponse.json(
-      { error: messages[result.reason], fields: { code: messages[result.reason] } },
+      { error: "That code didn't work. Request a new one if it expired." },
       { status: 400 },
     );
   }

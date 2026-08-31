@@ -1,6 +1,12 @@
 import { AdminShell } from "@/components/admin/AdminShell";
 import { CmsUnlock } from "@/components/admin/CmsUnlock";
 import { getAdminSession } from "@/server/admin-session";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "404",
+  robots: { index: false, follow: false, nocache: true },
+};
 
 export default async function AdminLayout({
   children,

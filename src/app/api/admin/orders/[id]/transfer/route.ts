@@ -5,7 +5,7 @@ import { fieldErrors, orderIdSchema, transferOrderSchema } from "@/lib/validatio
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassApproved, sendPassTransferredAway } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { flushStore, hydrateStore, transferOrder } from "@/server/store";
+import { flushStore, hydrateStore, toStaffOrder, transferOrder } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -90,5 +90,5 @@ export async function POST(
   }
 
   await flushStore();
-  return NextResponse.json({ ok: true, order: result.order });
+  return NextResponse.json({ ok: true, order: toStaffOrder(result.order) });
 }

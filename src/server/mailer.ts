@@ -194,7 +194,7 @@ export async function sendVerificationCode(
   name: string,
   code: string,
 ): Promise<SendResult> {
-  const firstName = name.split(" ")[0] || "there";
+  const firstName = escapeHtml(name.split(" ")[0] || "there");
   const html = shell(
     "Here's your code",
     `<p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#c9cadb">
@@ -227,17 +227,18 @@ export async function sendLoginCode(to: string, code: string): Promise<SendResul
 }
 
 export async function sendOrderConfirmation(order: Order, passName: string): Promise<SendResult> {
-  const firstName = order.buyer.name.split(" ")[0] || "there";
+  const firstName = escapeHtml(order.buyer.name.split(" ")[0] || "there");
+  const passNameSafe = escapeHtml(passName);
   const row = (label: string, value: string) =>
     `<tr>
        <td style="padding:9px 0;font-size:11px;letter-spacing:.2em;color:#8c8fa8;text-transform:uppercase">${label}</td>
-       <td style="padding:9px 0;font-size:14px;color:#f4f4f8;text-align:right">${value}</td>
+       <td style="padding:9px 0;font-size:14px;color:#f4f4f8;text-align:right">${escapeHtml(value)}</td>
      </tr>`;
 
   const html = shell(
     "Pay on UPI, then we lock it in",
     `<p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#c9cadb">
-       ${firstName}, we're holding ${order.quantity} × ${passName}. Pay the total from the checkout QR
+       ${firstName}, we're holding ${order.quantity} × ${passNameSafe}. Pay the total from the checkout QR
        (same amount, same UPI ID). Once we see the credit, your pass lands in this inbox.
      </p>
      <p style="margin:0 0 22px;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
@@ -337,12 +338,14 @@ export async function sendPassRejected(
   passName: string,
   reason?: string,
 ): Promise<SendResult> {
-  const firstName = order.buyer.name.split(" ")[0] || "there";
+  const firstName = escapeHtml(order.buyer.name.split(" ")[0] || "there");
+  const passNameSafe = escapeHtml(passName);
+  const reasonSafe = reason ? escapeHtml(reason) : "";
   const html = shell(
     "We couldn't confirm this one",
     `<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#c9cadb">
-       ${firstName}, your reservation for ${order.quantity} × ${passName} (${order.reference})
-       didn't clear on our side${reason ? ` — ${reason}` : ""}.
+       ${firstName}, your reservation for ${order.quantity} × ${passNameSafe} (${escapeHtml(order.reference)})
+       didn't clear on our side${reasonSafe ? ` — ${reasonSafe}` : ""}.
      </p>
      <p style="margin:0;font-size:13px;line-height:1.7;color:#8c8fa8">
        If you think this is a mistake, reply to this email with your UPI proof (UTR / screenshot) and we'll take another look.
@@ -353,7 +356,7 @@ export async function sendPassRejected(
 }
 
 export async function sendEntryNotice(order: Order): Promise<SendResult> {
-  const firstName = order.buyer.name.split(" ")[0] || "there";
+  const firstName = escapeHtml(order.buyer.name.split(" ")[0] || "there");
   const html = shell(
     "You're in. That's the party.",
     `<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#c9cadb">

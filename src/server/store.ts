@@ -3,8 +3,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { PassId } from "@/lib/passes";
+import { isJpegDataUrl } from "./jpeg";
 import { derivePassDigits } from "./pass-code";
 import { getPhraseHashes } from "./phrase";
+import { getAuthSecret } from "./secret";
 
 // Resolve CMS/door phrase hashes on boot (env override or first-deploy fallback).
 getPhraseHashes();
@@ -59,6 +61,7 @@ export type Order = {
   transferredBy?: string;
   transferHistory?: TransferRecord[];
   revokedPassCodes?: string[];
+  hasPaymentProof?: boolean;
 };
 
 export type ScanResult = "admitted" | "already-in" | "invalid" | "unpaid" | "rejected";
@@ -85,6 +88,7 @@ type Verification = {
   lastSentAt: number;
   sendCount: number;
   verifiedAt?: number;
+  reserveUsedAt?: number;
 };
 
 type Db = {
@@ -234,7 +238,7 @@ export async function hydrateStore(): Promise<void> {
 }
 
 function secret(): string {
-  return process.env.AUTH_SECRET ?? "utopia-dev-secret-change-me";
+  return getAuthSecret();
 }
 
 function hashCode(email: string, code: string): string {
@@ -382,6 +386,20 @@ export function verifyToken(token: string, email: string): boolean {
   return decodePurposeToken("verify-email", token)?.subject === email;
 }
 
+/** A verify-email token can open one reservation, then pay for it — not a second booking. */
+export function canReserveWithToken(token: string, email: string): boolean {
+  if (!verifyToken(token, email)) return false;
+  const record = db.verifications[email.trim().toLowerCase()];
+  return !record?.reserveUsedAt;
+}
+
+export function markEmailReserved(email: string): void {
+  const record = db.verifications[email.trim().toLowerCase()];
+  if (!record) return;
+  record.reserveUsedAt = Date.now();
+  persist();
+}
+
 const BUYER_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 /** Cookie for a guest looking up their own passes — not staff, not door. */
@@ -492,6 +510,9 @@ export function attachPaymentProof(
   if (DECIDED_STATUSES.includes(order.status)) {
     return { ok: false, reason: "already-decided" };
   }
+  if (!isJpegDataUrl(proof.proofData)) {
+    return { ok: false, reason: "not-found" };
+  }
   order.paidSubmittedAt = Date.now();
   order.utr = proof.utr;
   order.paymentRef = proof.utr;
@@ -511,7 +532,7 @@ export type DecisionResult =
 const DECIDED_STATUSES: OrderStatus[] = ["paid", "rejected", "cancelled"];
 
 function mintPass(order: Order): void {
-  const passCode = derivePassDigits(order.buyer.email, order.buyer.phone);
+  const passCode = derivePassDigits(order.buyer.email, order.buyer.phone, order.id);
   order.passCode = passCode;
   order.qrToken = signPurposeToken("pass-qr", `${order.id}:${passCode}`, PASS_QR_TTL_MS);
 }
@@ -696,7 +717,7 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
     name: order?.buyer.name,
     email: order?.buyer.email,
     result,
-    payload: raw.slice(0, 240),
+    payload: raw.slice(0, 48).replace(/[A-Za-z0-9_-]{20,}/g, "[redacted]"),
     at: Date.now(),
     by: scannedBy,
     firstEntry: result === "admitted",
@@ -723,6 +744,7 @@ export type WalletPass = {
   email: string;
   phone: string;
   enteredAt?: number;
+  exp?: number;
 };
 
 export function toWalletPass(order: Order): WalletPass {
@@ -743,8 +765,11 @@ export function toWalletPass(order: Order): WalletPass {
   };
 }
 
+const CLAIM_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
 export function signPassClaim(order: Order): string {
-  const body = Buffer.from(JSON.stringify(toWalletPass(order))).toString("base64url");
+  const payload = { ...toWalletPass(order), exp: Date.now() + CLAIM_TTL_MS };
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signature = createHmac("sha256", secret()).update(`pass-claim:${body}`).digest("base64url");
   return `${body}.${signature}`;
 }
@@ -757,6 +782,7 @@ export function verifyPassClaim(token: string): WalletPass | null {
   try {
     const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as WalletPass;
     if (!parsed.email || !parsed.reference || !parsed.id) return null;
+    if (typeof parsed.exp !== "number" || Date.now() >= parsed.exp) return null;
     return parsed;
   } catch {
     return null;
@@ -773,21 +799,13 @@ export function importWalletPass(pass: WalletPass): Order | null {
     );
 
   if (existing) {
-    // Stale claim / wallet after a CMS transfer must not rewrite the live pass
-    // or leak the new owner's door code to the previous inbox.
     if (existing.status === "paid" && existing.buyer.email !== email) {
       return null;
     }
-    if (existing.status === "paid") {
-      return existing;
-    }
-    if (pass.status === "paid") {
-      existing.status = "paid";
-      existing.paidAt = existing.paidAt ?? Date.now();
-    }
-    persist();
     return existing;
   }
+
+  if (pass.status !== "paid") return null;
 
   const order: Order = {
     id: pass.id || randomBytes(12).toString("base64url"),
@@ -816,67 +834,39 @@ export function importWalletPass(pass: WalletPass): Order | null {
 export function recoverPaidPass(input: {
   email: string;
   phone: string;
-  name?: string;
   passCode: string;
   reference?: string;
-  passId?: PassId;
-  quantity?: number;
 }): { ok: true; order: Order } | { ok: false; reason: "code-mismatch" } {
   const email = input.email.trim().toLowerCase();
   const phone = input.phone.replace(/\D/g, "");
   const passCode = input.passCode.replace(/\D/g, "");
-  if (derivePassDigits(email, phone) !== passCode) {
-    return { ok: false, reason: "code-mismatch" };
-  }
+  const ref = input.reference?.trim().toUpperCase();
 
   const revoked = Object.values(db.orders).some((order) =>
     (order.revokedPassCodes ?? []).includes(passCode),
   );
-  if (revoked) {
-    return { ok: false, reason: "code-mismatch" };
-  }
+  if (revoked) return { ok: false, reason: "code-mismatch" };
 
-  const ref = input.reference?.trim().toUpperCase();
-  const existing =
-    (ref ? getOrderByReference(ref) : undefined) ??
-    Object.values(db.orders).find(
-      (order) => order.buyer.email === email && order.passCode === passCode,
-    );
+  const matches = Object.values(db.orders).filter((order) => {
+    if (order.status !== "paid") return false;
+    if (order.buyer.email !== email) return false;
+    if (order.passCode !== passCode) return false;
+    if (order.buyer.phone.replace(/\D/g, "") !== phone) return false;
+    if (ref && order.reference !== ref) return false;
+    return true;
+  });
 
-  if (existing) {
-    if (existing.buyer.email !== email) return { ok: false, reason: "code-mismatch" };
-    existing.buyer.phone = phone;
-    existing.status = "paid";
-    existing.paidAt = existing.paidAt ?? Date.now();
-    mintPass(existing);
-    persist();
-    return { ok: true, order: existing };
-  }
+  if (matches.length !== 1) return { ok: false, reason: "code-mismatch" };
+  return { ok: true, order: matches[0] };
+}
 
-  // Don't mint a free paid pass from an old email+phone hash. Store-wipe
-  // recover still works when they bring an unused reservation reference.
-  if (!ref || !/^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(ref)) {
-    return { ok: false, reason: "code-mismatch" };
-  }
-
-  const now = Date.now();
-  const order: Order = {
-    id: randomBytes(12).toString("base64url"),
-    reference: ref && /^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(ref) ? ref : reference(),
-    passId: input.passId ?? "vip",
-    quantity: input.quantity ?? 1,
-    unitPrice: 0,
-    subtotal: 0,
-    fee: 0,
-    total: 0,
-    buyer: { name: input.name?.trim() || email.split("@")[0] || "Guest", email, phone },
-    status: "paid",
-    createdAt: now,
-    holdExpiresAt: now,
-    paidAt: now,
+/** CMS list/detail JSON — never ship the screenshot blob or live QR HMAC. */
+export function toStaffOrder(order: Order) {
+  const rest = { ...order };
+  delete rest.paymentProofData;
+  delete rest.qrToken;
+  return {
+    ...rest,
+    hasPaymentProof: Boolean(order.paymentProofData),
   };
-  mintPass(order);
-  db.orders[order.id] = order;
-  persist();
-  return { ok: true, order };
 }

@@ -4,7 +4,7 @@ import { getPassById } from "@/lib/passes";
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassApproved } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { approveOrder, flushStore, hydrateStore } from "@/server/store";
+import { approveOrder, flushStore, hydrateStore, toStaffOrder } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -49,5 +49,5 @@ export async function POST(
   }
 
   await flushStore();
-  return NextResponse.json({ ok: true, order: result.order });
+  return NextResponse.json({ ok: true, order: toStaffOrder(result.order) });
 }

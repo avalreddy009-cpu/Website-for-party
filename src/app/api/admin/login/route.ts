@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { fieldErrors, phraseLoginSchema } from "@/lib/validation";
-import { ADMIN_SESSION_COOKIE, checkUnlockPhrase, unlockConfigured } from "@/server/admin-auth";
+import { ADMIN_SESSION_COOKIE, checkUnlockPhrase, cookieSecure, unlockConfigured } from "@/server/admin-auth";
 import { clientKey, rateLimit } from "@/server/rate-limit";
 import { signAdminSession } from "@/server/store";
 
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   const cookieStore = await cookies();
   cookieStore.set(ADMIN_SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecure(),
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS,

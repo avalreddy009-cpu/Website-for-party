@@ -2,10 +2,11 @@ import { createHmac } from "node:crypto";
 import QRCode from "qrcode";
 
 import { siteUrl } from "@/lib/site";
+import { getAuthSecret } from "./secret";
 import type { Order } from "./store";
 
 function secret(): string {
-  return process.env.AUTH_SECRET ?? "utopia-dev-secret-change-me";
+  return getAuthSecret();
 }
 
 /**
@@ -13,9 +14,11 @@ function secret(): string {
  * Guessing someone's phone doesn't get you their pass code; you also need
  * AUTH_SECRET, which never leaves the server.
  */
-export function derivePassDigits(email: string, phone: string): string {
+export function derivePassDigits(email: string, phone: string, orderId?: string): string {
   const digest = createHmac("sha256", secret())
-    .update(`pass-digits:${email.trim().toLowerCase()}:${phone.replace(/\D/g, "")}`)
+    .update(
+      `pass-digits:${email.trim().toLowerCase()}:${phone.replace(/\D/g, "")}:${orderId ?? ""}`,
+    )
     .digest();
   const n = digest.readUInt32BE(0) % 1_000_000;
   return String(n).padStart(6, "0");

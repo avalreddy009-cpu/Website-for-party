@@ -1,13 +1,14 @@
 import { cookies } from "next/headers";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { PASS_WALLET_COOKIE } from "./admin-auth";
+import { PASS_WALLET_COOKIE, cookieSecure } from "./admin-auth";
+import { getAuthSecret } from "./secret";
 import { toWalletPass, type Order, type WalletPass } from "./store";
 
 const WALLET_MAX_AGE = 60 * 60 * 24 * 40;
 
 function secret() {
-  return process.env.AUTH_SECRET ?? "utopia-dev-secret-change-me";
+  return getAuthSecret();
 }
 
 function sign(body: string): string {
@@ -62,7 +63,7 @@ export async function writePassWallet(email: string, orders: WalletPass[]): Prom
   const store = await cookies();
   store.set(PASS_WALLET_COOKIE, sign(body), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecure(),
     sameSite: "lax",
     path: "/",
     maxAge: WALLET_MAX_AGE,

@@ -5,7 +5,7 @@ import { fieldErrors, rejectOrderSchema } from "@/lib/validation";
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassRejected } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { flushStore, hydrateStore, rejectOrder } from "@/server/store";
+import { flushStore, hydrateStore, rejectOrder, toStaffOrder } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -62,5 +62,5 @@ export async function POST(
   }
 
   await flushStore();
-  return NextResponse.json({ ok: true, order: result.order });
+  return NextResponse.json({ ok: true, order: toStaffOrder(result.order) });
 }

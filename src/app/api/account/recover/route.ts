@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { fieldErrors, phoneSchema } from "@/lib/validation";
 import { getBuyerSession } from "@/server/admin-session";
 import { upsertPassWallet } from "@/server/pass-wallet";
+import { clientKey, rateLimit } from "@/server/rate-limit";
 import { flushStore, hydrateStore, recoverPaidPass } from "@/server/store";
 import { z } from "zod";
 
@@ -36,6 +37,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   }
 
+  const limited = rateLimit(clientKey(request, "account-recover"), 8, 10 * 60 * 1000);
+  if (!limited.allowed) {
+    return NextResponse.json({ error: "Slow down a little." }, { status: 429 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -56,7 +62,6 @@ export async function POST(request: Request) {
     phone: parsed.data.phone,
     passCode: parsed.data.passCode,
     reference: parsed.data.reference,
-    name: parsed.data.name,
   });
 
   if (!result.ok) {

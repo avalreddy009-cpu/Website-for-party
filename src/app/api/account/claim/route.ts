@@ -1,15 +1,21 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { BUYER_SESSION_COOKIE } from "@/server/admin-auth";
+import { BUYER_SESSION_COOKIE, cookieSecure } from "@/server/admin-auth";
 import { upsertPassWallet } from "@/server/pass-wallet";
 import { flushStore, hydrateStore, importWalletPass, signBuyerSession, verifyPassClaim } from "@/server/store";
 import { getBuyerSession } from "@/server/admin-session";
+import { clientKey, rateLimit } from "@/server/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   await hydrateStore();
+
+  const limited = rateLimit(clientKey(request, "account-claim"), 12, 10 * 60 * 1000);
+  if (!limited.allowed) {
+    return NextResponse.json({ error: "Slow down a little." }, { status: 429 });
+  }
 
   let body: unknown;
   try {
@@ -45,7 +51,7 @@ export async function POST(request: Request) {
     const cookieStore = await cookies();
     cookieStore.set(BUYER_SESSION_COOKIE, signBuyerSession(claim.email), {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: cookieSecure(),
       sameSite: "lax",
       path: "/",
       maxAge: 12 * 60 * 60,
