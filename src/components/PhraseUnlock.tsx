@@ -13,7 +13,6 @@ type PhraseUnlockProps = {
   submitLabel: string;
   endpoint: string;
   onUnlocked: () => void;
-  stealth?: boolean;
 };
 
 function emptyWords(): string[] {
@@ -27,7 +26,6 @@ export function PhraseUnlock({
   submitLabel,
   endpoint,
   onUnlocked,
-  stealth = false,
 }: PhraseUnlockProps) {
   const [words, setWords] = useState<string[]>(emptyWords);
   const [error, setError] = useState<string | null>(null);
@@ -89,21 +87,11 @@ export function PhraseUnlock({
 
   return (
     <form onSubmit={submit} className="relative">
-      {!stealth && (
-        <>
-          <p className="font-mono text-[9px] tracking-[0.32em] text-electric-200/70 uppercase">
-            {eyebrow}
-          </p>
-          <h1 className="font-display mt-2 text-3xl font-light text-bone sm:text-4xl">{title}</h1>
-          <p className="mt-2 text-xs leading-relaxed text-bone/45">{hint}</p>
-        </>
-      )}
-      {stealth && (
-        <div className="mb-8 text-center">
-          <p className="font-display text-7xl font-light text-bone/80">404</p>
-          <p className="mt-3 text-sm text-bone/45">This page could not be found.</p>
-        </div>
-      )}
+      <p className="font-mono text-[9px] tracking-[0.32em] text-electric-200/70 uppercase">
+        {eyebrow}
+      </p>
+      <h1 className="font-display mt-2 text-3xl font-light text-bone sm:text-4xl">{title}</h1>
+      <p className="mt-2 text-xs leading-relaxed text-bone/45">{hint}</p>
 
       <div className="mt-7 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {words.map((word, i) => (

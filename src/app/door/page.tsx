@@ -265,15 +265,16 @@ export default function DoorPage() {
 
         {authed === false && (
           <div className="m-auto w-full max-w-lg">
-            <PhraseUnlock
-              stealth
-              eyebrow=""
-              title="404"
-              hint=""
-              submitLabel="CONTINUE"
-              endpoint="/api/door/login"
-              onUnlocked={() => setAuthed(true)}
-            />
+            <div className="glass-strong rounded-3xl p-7 sm:p-9">
+              <PhraseUnlock
+                eyebrow={`${EVENT.host} · DOOR`}
+                title="Door phrase"
+                hint="Staff only. Twelve words."
+                submitLabel="UNLOCK DOOR"
+                endpoint="/api/door/login"
+                onUnlocked={() => setAuthed(true)}
+              />
+            </div>
           </div>
         )}
 
