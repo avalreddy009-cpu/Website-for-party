@@ -107,7 +107,8 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
               }
         }
       >
-        {Array.from({ length: EXTRUDE }, (_, i) => {
+        {Array.from({ length: EXTRUDE }, (_, layer) => {
+          const i = EXTRUDE - 1 - layer;
           const face = i === 0;
           const t = i / (EXTRUDE - 1);
           return (
