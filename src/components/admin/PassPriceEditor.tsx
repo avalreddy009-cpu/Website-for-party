@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { IndianRupee, Loader2 } from "lucide-react";
 
 import { formatPrice } from "@/lib/event";
 import { DEFAULT_PASS_PRICES, PASSES } from "@/lib/passes";
@@ -61,63 +61,74 @@ export function PassPriceEditor() {
   };
 
   return (
-    <div className="glass mt-8 rounded-2xl border border-white/10 p-5 sm:p-6">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+    <section
+      id="prices"
+      className="glass-strong rounded-3xl border border-electric-300/25 p-6 sm:p-8"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="font-mono text-[9px] tracking-[0.32em] text-electric-200/70 uppercase">
-            PASS PRICES
+          <p className="font-mono text-[9px] tracking-[0.32em] text-electric-200/80 uppercase">
+            LIVE SITE
           </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-bone/45">
-            Changes go live on the site and at checkout. Already-paid orders keep their original total.
+          <h2 className="font-display mt-2 text-3xl font-light text-bone sm:text-4xl">
+            Edit pass prices
+          </h2>
+          <p className="mt-2 max-w-lg text-sm leading-relaxed text-bone/55">
+            Type the new rupee amount and save. The landing page and checkout
+            update immediately. Already-paid orders keep what they paid.
           </p>
         </div>
         {saved && (
-          <p className="font-mono text-[9px] tracking-[0.22em] text-electric-200/80 uppercase">
-            SAVED
+          <p className="font-mono text-[10px] tracking-[0.22em] text-electric-200 uppercase">
+            SAVED · LIVE NOW
           </p>
         )}
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <div className="mt-7 grid gap-4 md:grid-cols-2">
         {PASSES.map((pass) => {
           const value = pass.id === "early" ? early : vip;
           const setValue = pass.id === "early" ? setEarly : setVip;
           return (
-            <label key={pass.id} className="block">
-              <span className="font-mono text-[8px] tracking-[0.24em] text-bone/35 uppercase">
-                {pass.name}
+            <label
+              key={pass.id}
+              className="block rounded-2xl border border-white/10 bg-white/3 p-5"
+            >
+              <span className="font-mono text-[10px] tracking-[0.28em] text-bone/50 uppercase">
+                {pass.index} · {pass.name}
               </span>
-              <span className="mt-1.5 flex items-center gap-2 rounded-xl border border-white/10 bg-white/2 px-3.5 py-2.5 focus-within:border-electric-300/50">
-                <span className="font-mono text-[12px] text-bone/40">₹</span>
+              <span className="mt-1 block text-xs text-bone/40">{pass.subtitle}</span>
+              <span className="mt-4 flex items-center gap-2 border-b border-white/12 pb-2">
+                <IndianRupee className="size-6 text-bone/50" strokeWidth={1.6} />
                 <input
                   inputMode="numeric"
                   value={value}
                   onChange={(event) => setValue(event.target.value.replace(/[^\d]/g, ""))}
-                  className="w-full bg-transparent font-display text-xl font-light text-bone tabular-nums outline-none"
+                  className="w-full bg-transparent font-display text-4xl font-light text-bone tabular-nums outline-none sm:text-5xl"
+                  aria-label={`${pass.name} price in rupees`}
                 />
+              </span>
+              <span className="mt-2 block font-mono text-[9px] tracking-[0.18em] text-bone/30 uppercase">
+                Shows as {formatPrice(Number(value) || 0)}
               </span>
             </label>
           );
         })}
-
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={busy}
-          className="flex h-[46px] items-center justify-center gap-2 rounded-full bg-bone px-5 font-mono text-[9px] font-bold tracking-[0.2em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] disabled:scale-100 disabled:opacity-50"
-        >
-          {busy && <Loader2 className="size-3.5 animate-spin" />}
-          SAVE PRICES
-        </button>
       </div>
 
-      {error && (
-        <p className="mt-3 text-[12px] leading-relaxed text-signal-soft">{error}</p>
-      )}
+      <button
+        type="button"
+        onClick={() => void save()}
+        disabled={busy}
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-bone px-6 py-4 font-mono text-[11px] font-bold tracking-[0.22em] text-void uppercase transition-transform duration-300 hover:scale-[1.01] disabled:scale-100 disabled:opacity-50 sm:w-auto sm:px-10"
+      >
+        {busy && <Loader2 className="size-3.5 animate-spin" />}
+        SAVE PRICES
+      </button>
 
-      <p className="mt-3 font-mono text-[8px] tracking-[0.18em] text-bone/30 uppercase">
-        Live preview · Early {formatPrice(Number(early) || 0)} · VIP {formatPrice(Number(vip) || 0)}
-      </p>
-    </div>
+      {error && (
+        <p className="mt-4 text-[13px] leading-relaxed text-signal-soft">{error}</p>
+      )}
+    </section>
   );
 }

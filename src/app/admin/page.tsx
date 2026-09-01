@@ -159,7 +159,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex-1">
-      <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
+      <PassPriceEditor />
+
+      <div className="mt-12 flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
         <div>
           <p className="font-mono text-[9px] tracking-[0.32em] text-electric-200/70 uppercase">
             PASS VERIFICATION
@@ -182,8 +184,6 @@ export default function AdminDashboard() {
           REFRESH
         </button>
       </div>
-
-      <PassPriceEditor />
 
       {stats && (
         <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">

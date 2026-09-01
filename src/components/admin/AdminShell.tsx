@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ScanLine, ShieldCheck, Ticket } from "lucide-react";
+import { IndianRupee, ScanLine, ShieldCheck, Ticket } from "lucide-react";
 
 import { BackgroundFX } from "@/components/BackgroundFX";
 import { EVENT } from "@/lib/event";
@@ -28,6 +28,13 @@ export function AdminShell({ username, children }: AdminShellProps) {
             </a>
 
             <nav className="hidden items-center gap-5 sm:flex">
+              <a
+                href="/admin#prices"
+                className="flex items-center gap-1.5 font-mono text-[9px] tracking-[0.22em] text-bone/55 uppercase transition-colors hover:text-bone"
+              >
+                <IndianRupee className="size-3.5" />
+                PRICES
+              </a>
               <a
                 href="/admin"
                 className="flex items-center gap-1.5 font-mono text-[9px] tracking-[0.22em] text-bone/55 uppercase transition-colors hover:text-bone"
