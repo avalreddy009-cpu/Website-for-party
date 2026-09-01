@@ -133,14 +133,14 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
               style={{
                 transform: `translate(-50%, -50%) translateZ(${-i * 2.6}px)`,
                 color: face
-                  ? "#07080e"
+                  ? "#2a2c3a"
                   : t < 0.22
-                    ? `rgba(18, 16, 38, ${0.92 - t * 0.3})`
+                    ? `rgba(58, 62, 92, ${0.9 - t * 0.2})`
                     : t < 0.5
-                      ? `rgba(28, 26, 58, ${0.8 - t * 0.25})`
-                      : `rgba(8, 7, 18, ${0.98 - t * 0.2})`,
+                      ? `rgba(32, 34, 58, ${0.85 - t * 0.2})`
+                      : `rgba(14, 15, 28, ${0.95 - t * 0.15})`,
                 textShadow: face
-                  ? "0 1px 0 rgba(244,244,248,0.08), 0 0 28px rgba(3,3,7,0.55)"
+                  ? "0 1px 0 rgba(244,244,248,0.22), 0 0 18px rgba(125,139,255,0.22), 0 0 40px rgba(3,3,7,0.45)"
                   : "none",
               }}
             >
@@ -156,7 +156,7 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
           style={{
             transform:
               "translate(-50%, -50%) translateZ(-2px) translateY(96%) scaleY(-0.9)",
-            color: "rgba(7, 8, 14, 0.28)",
+            color: "rgba(42, 44, 58, 0.38)",
             maskImage:
               "linear-gradient(to bottom, transparent 18%, rgba(0,0,0,0.85) 100%)",
             WebkitMaskImage:
