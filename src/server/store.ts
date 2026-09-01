@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { PassId } from "@/lib/passes";
+import { DEFAULT_PASS_PRICES } from "@/lib/passes";
 import { isJpegDataUrl } from "./jpeg";
 import { derivePassDigits } from "./pass-code";
 import { getPhraseHashes } from "./phrase";
@@ -91,10 +92,17 @@ type Verification = {
   reserveUsedAt?: number;
 };
 
+type PassPriceState = {
+  early: number;
+  vip: number;
+  updatedAt: number;
+};
+
 type Db = {
   orders: Record<string, Order>;
   verifications: Record<string, Verification>;
   scans: ScanLog[];
+  passPrices: PassPriceState;
 };
 
 const DATA_FILE = join(process.cwd(), ".data", "utopia.json");
@@ -103,8 +111,23 @@ const RESEND_COOLDOWN_MS = 45 * 1000;
 const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_WINDOW = 5;
 
+function defaultPassPrices(): PassPriceState {
+  return { ...DEFAULT_PASS_PRICES, updatedAt: 0 };
+}
+
+function normalizePassPrices(value: unknown): PassPriceState {
+  const incoming = value as Partial<PassPriceState> | undefined;
+  const early = Number(incoming?.early);
+  const vip = Number(incoming?.vip);
+  return {
+    early: Number.isInteger(early) && early >= 1 ? early : DEFAULT_PASS_PRICES.early,
+    vip: Number.isInteger(vip) && vip >= 1 ? vip : DEFAULT_PASS_PRICES.vip,
+    updatedAt: typeof incoming?.updatedAt === "number" ? incoming.updatedAt : 0,
+  };
+}
+
 function emptyDb(): Db {
-  return { orders: {}, verifications: {}, scans: [] };
+  return { orders: {}, verifications: {}, scans: [], passPrices: defaultPassPrices() };
 }
 
 function load(): Db {
@@ -115,6 +138,7 @@ function load(): Db {
         orders: parsed.orders ?? {},
         verifications: parsed.verifications ?? {},
         scans: Array.isArray(parsed.scans) ? parsed.scans : [],
+        passPrices: normalizePassPrices(parsed.passPrices),
       };
     }
   } catch {
@@ -129,6 +153,7 @@ const db: Db = (globalRef.__utopiaDb ??= load());
 if (!db.orders) db.orders = {};
 if (!db.verifications) db.verifications = {};
 if (!Array.isArray(db.scans)) db.scans = [];
+if (!db.passPrices) db.passPrices = defaultPassPrices();
 
 let persistWarned = false;
 
@@ -166,7 +191,12 @@ function upstashAuth(): { url: string; token: string } | null {
 }
 
 function snapshotDb(): Db {
-  return { orders: db.orders, verifications: db.verifications, scans: db.scans };
+  return {
+    orders: db.orders,
+    verifications: db.verifications,
+    scans: db.scans,
+    passPrices: db.passPrices,
+  };
 }
 
 function mergeRemote(remote: Partial<Db>): void {
@@ -190,6 +220,12 @@ function mergeRemote(remote: Partial<Db>): void {
     const extra = remote.scans.filter((scan) => !seen.has(scan.id));
     if (extra.length > 0) {
       db.scans = [...extra, ...db.scans].sort((a, b) => b.at - a.at).slice(0, 400);
+    }
+  }
+  if (remote.passPrices) {
+    const incoming = normalizePassPrices(remote.passPrices);
+    if (incoming.updatedAt >= (db.passPrices?.updatedAt ?? 0)) {
+      db.passPrices = incoming;
     }
   }
 }
@@ -235,6 +271,30 @@ export async function hydrateStore(): Promise<void> {
     }
   })();
   await globalHydrate.__utopiaHydrate;
+}
+
+export function getPassPrices(): { early: number; vip: number } {
+  return {
+    early: db.passPrices?.early ?? DEFAULT_PASS_PRICES.early,
+    vip: db.passPrices?.vip ?? DEFAULT_PASS_PRICES.vip,
+  };
+}
+
+export function getPassPrice(id: PassId): number {
+  return getPassPrices()[id];
+}
+
+export function setPassPrices(input: { early: number; vip: number }): {
+  early: number;
+  vip: number;
+} {
+  db.passPrices = {
+    early: input.early,
+    vip: input.vip,
+    updatedAt: Date.now(),
+  };
+  persist();
+  return getPassPrices();
 }
 
 function secret(): string {

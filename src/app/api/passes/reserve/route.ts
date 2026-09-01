@@ -12,6 +12,7 @@ import {
   canReserveWithToken,
   createOrder,
   flushStore,
+  getPassPrice,
   hydrateStore,
   markEmailReserved,
 } from "@/server/store";
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
   }
 
   const pass = getPassById(passId);
-  const totals = priceOrder(passId, quantity);
+  const totals = priceOrder(passId, quantity, getPassPrice(passId));
   const upi = getUpiConfig();
 
   if (!upi.configured) {

@@ -39,12 +39,11 @@ import {
 import { UPI_APPS, upiAppHref } from "@/lib/upi-apps";
 import {
   MAX_QUANTITY,
-  PASSES,
-  getPassById,
   type PassId,
   type PassTier,
 } from "@/lib/passes";
 import { priceOrder } from "@/lib/pricing";
+import { usePassCatalog } from "@/lib/usePassCatalog";
 import { useNow } from "@/lib/useNow";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -226,9 +225,13 @@ function CheckoutFlow({
   const [copied, setCopied] = useState(false);
   const [utr, setUtr] = useState("");
   const [proof, setProof] = useState<PaymentScreenshot | null>(null);
+  const { catalog, byId } = usePassCatalog();
 
-  const tier = getPassById(tierId);
-  const totals = useMemo(() => priceOrder(tierId, quantity), [tierId, quantity]);
+  const tier = byId(tierId);
+  const totals = useMemo(
+    () => priceOrder(tierId, quantity, tier.price),
+    [tierId, quantity, tier.price],
+  );
 
   const resendIn =
     resendAt && now ? Math.max(0, Math.ceil((resendAt - now) / 1000)) : 0;
@@ -508,6 +511,7 @@ function CheckoutFlow({
           >
             {step === 0 && (
               <StepPass
+                catalog={catalog}
                 tierId={tierId}
                 onTierChange={setTierId}
                 quantity={quantity}
@@ -702,12 +706,14 @@ function CheckoutFlow({
 /* ------------------------------------------------------------------ */
 
 function StepPass({
+  catalog,
   tierId,
   onTierChange,
   quantity,
   onQuantityChange,
   subtotal,
 }: {
+  catalog: PassTier[];
   tierId: PassId;
   onTierChange: (id: PassId) => void;
   quantity: number;
@@ -723,7 +729,7 @@ function StepPass({
           hint="Change your mind here, it's free."
         />
         <div className="mt-5 grid gap-2.5">
-          {PASSES.map((option) => {
+          {catalog.map((option) => {
             const active = option.id === tierId;
             return (
               <button

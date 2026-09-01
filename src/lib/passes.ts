@@ -60,8 +60,33 @@ export const PASSES: PassTier[] = [
 
 export const MAX_QUANTITY = 8;
 
-export function getPassById(id: PassId): PassTier {
-  return PASSES.find((pass) => pass.id === id) ?? PASSES[0];
+export const DEFAULT_PASS_PRICES: Record<PassId, number> = {
+  early: 1249,
+  vip: 1549,
+};
+
+export type PassPriceTable = Record<PassId, number>;
+
+export function catalogWithPrices(prices: PassPriceTable): PassTier[] {
+  const early = prices.early ?? DEFAULT_PASS_PRICES.early;
+  const vip = prices.vip ?? DEFAULT_PASS_PRICES.vip;
+  return PASSES.map((pass) => {
+    const price = pass.id === "vip" ? vip : early;
+    if (pass.id === "vip") {
+      const extra = vip - early;
+      return {
+        ...pass,
+        price,
+        badge: extra > 0 ? `₹${extra.toLocaleString("en-IN")} MORE. WORTH IT.` : undefined,
+      };
+    }
+    return { ...pass, price };
+  });
+}
+
+export function getPassById(id: PassId, prices?: PassPriceTable): PassTier {
+  const catalog = prices ? catalogWithPrices(prices) : PASSES;
+  return catalog.find((pass) => pass.id === id) ?? catalog[0];
 }
 
 export function isPassId(value: string): value is PassId {

@@ -102,6 +102,19 @@ export const orderIdSchema = z
 
 export const transferOrderSchema = buyerSchema;
 
+export const passPricesSchema = z.object({
+  early: z.coerce
+    .number()
+    .int("Whole rupees only.")
+    .min(1, "Price has to be at least ₹1.")
+    .max(99_999, "That price is too high."),
+  vip: z.coerce
+    .number()
+    .int("Whole rupees only.")
+    .min(1, "Price has to be at least ₹1.")
+    .max(99_999, "That price is too high."),
+});
+
 export type BuyerInput = z.infer<typeof buyerSchema>;
 export type OrderIntentInput = z.infer<typeof orderIntentSchema>;
 export type ReserveInput = z.infer<typeof reserveSchema>;

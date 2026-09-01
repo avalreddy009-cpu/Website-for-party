@@ -3,7 +3,8 @@
 import { Mail, ShieldCheck, Zap } from "lucide-react";
 
 import { EVENT } from "@/lib/event";
-import { PASSES, type PassTier } from "@/lib/passes";
+import type { PassTier } from "@/lib/passes";
+import { usePassCatalog } from "@/lib/usePassCatalog";
 import { PassCard } from "./PassCard";
 import { Reveal, SectionLabel } from "./ui/Reveal";
 
@@ -12,6 +13,8 @@ type PassTiersProps = {
 };
 
 export function PassTiers({ onBuy }: PassTiersProps) {
+  const { catalog } = usePassCatalog();
+
   return (
     <section
       id="passes"
@@ -53,7 +56,7 @@ export function PassTiers({ onBuy }: PassTiersProps) {
       </div>
 
       <div className="mt-16 grid gap-8 sm:mt-20 md:grid-cols-2 lg:gap-10">
-        {PASSES.map((pass, i) => (
+        {catalog.map((pass, i) => (
           <PassCard key={pass.id} pass={pass} index={i} onBuy={onBuy} />
         ))}
       </div>

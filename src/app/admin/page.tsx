@@ -21,6 +21,7 @@ import { STATUS_LABEL, type OrderStats } from "@/lib/order-stats";
 import { getPassById } from "@/lib/passes";
 import { useNow } from "@/lib/useNow";
 import type { Order, OrderStatus } from "@/server/store";
+import { PassPriceEditor } from "@/components/admin/PassPriceEditor";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -181,6 +182,8 @@ export default function AdminDashboard() {
           REFRESH
         </button>
       </div>
+
+      <PassPriceEditor />
 
       {stats && (
         <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">

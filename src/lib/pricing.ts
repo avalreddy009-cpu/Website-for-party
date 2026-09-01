@@ -8,8 +8,11 @@ export type Totals = {
 };
 
 /** Single source of truth for money, used by both the UI and the API. */
-export function priceOrder(passId: PassId, quantity: number): Totals {
-  const unitPrice = getPassById(passId).price;
+export function priceOrder(
+  passId: PassId,
+  quantity: number,
+  unitPrice = getPassById(passId).price,
+): Totals {
   const subtotal = unitPrice * quantity;
   return { unitPrice, subtotal, fee: 0, total: subtotal };
 }
