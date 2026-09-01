@@ -1,4 +1,4 @@
-import { BOOKING_FEE_RATE, getPassById, type PassId } from "./passes";
+import { getPassById, type PassId } from "./passes";
 
 export type Totals = {
   unitPrice: number;
@@ -11,6 +11,5 @@ export type Totals = {
 export function priceOrder(passId: PassId, quantity: number): Totals {
   const unitPrice = getPassById(passId).price;
   const subtotal = unitPrice * quantity;
-  const fee = Math.round(subtotal * BOOKING_FEE_RATE);
-  return { unitPrice, subtotal, fee, total: subtotal + fee };
+  return { unitPrice, subtotal, fee: 0, total: subtotal };
 }

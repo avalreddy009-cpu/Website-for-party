@@ -58,7 +58,6 @@ export const PASSES: PassTier[] = [
   },
 ];
 
-export const BOOKING_FEE_RATE = 0.05;
 export const MAX_QUANTITY = 8;
 
 export function getPassById(id: PassId): PassTier {

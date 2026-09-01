@@ -38,7 +38,6 @@ import {
 } from "@/lib/payment-proof";
 import { UPI_APPS, upiAppHref } from "@/lib/upi-apps";
 import {
-  BOOKING_FEE_RATE,
   MAX_QUANTITY,
   PASSES,
   getPassById,
@@ -1232,12 +1231,6 @@ function StepConfirm({
       </div>
 
       <div className="mt-5 space-y-2.5 rounded-2xl border border-white/9 bg-white/2 px-4 py-4">
-        <SummaryRow label="SUBTOTAL" value={formatPrice(totals.subtotal)} />
-        <SummaryRow
-          label={`BOOKING FEE (${Math.round(BOOKING_FEE_RATE * 100)}%)`}
-          value={formatPrice(totals.fee)}
-        />
-        <div className="my-1 h-px bg-white/8" />
         <div className="flex items-center justify-between">
           <span className="font-mono text-[9px] tracking-[0.28em] text-bone/60 uppercase">
             TOTAL
@@ -1289,17 +1282,6 @@ function StepConfirm({
           {error && <span className="text-signal-soft">{error}</span>}
         </span>
       </button>
-    </div>
-  );
-}
-
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="font-mono text-[8px] tracking-[0.24em] text-bone/35 uppercase">
-        {label}
-      </span>
-      <span className="text-[13px] text-bone/70 tabular-nums">{value}</span>
     </div>
   );
 }
