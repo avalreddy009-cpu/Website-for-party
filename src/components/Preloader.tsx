@@ -8,6 +8,9 @@ import { EVENT } from "@/lib/event";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const EXTRUDE = 16;
+/** One full shader ring cycle (~6.7s at 60fps) plus a beat to read the title. */
+const HOLD_MS = 7000;
+const FADE_MS = 900;
 
 type PreloaderProps = {
   onComplete: () => void;
@@ -28,13 +31,26 @@ export function Preloader({ onComplete }: PreloaderProps) {
       return () => window.clearTimeout(timeout);
     }
 
-    const lift = window.setTimeout(() => setLeaving(true), 2400);
-    const done = window.setTimeout(() => {
-      if (finished.current) return;
-      finished.current = true;
-      onComplete();
-    }, 3180);
+    let lift = 0;
+    let done = 0;
+    let cancelled = false;
+
+    // Clock starts after the first painted frame so WebGL boot doesn't eat the hold.
+    const arm = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        lift = window.setTimeout(() => setLeaving(true), HOLD_MS);
+        done = window.setTimeout(() => {
+          if (finished.current) return;
+          finished.current = true;
+          onComplete();
+        }, HOLD_MS + FADE_MS);
+      });
+    });
+
     return () => {
+      cancelled = true;
+      cancelAnimationFrame(arm);
       window.clearTimeout(lift);
       window.clearTimeout(done);
     };
@@ -45,7 +61,7 @@ export function Preloader({ onComplete }: PreloaderProps) {
       className="fixed inset-0 z-100 overflow-hidden bg-void"
       initial={{ opacity: 1 }}
       animate={{ opacity: leaving ? 0 : 1 }}
-      transition={{ duration: reduced ? 0.01 : 0.72, ease: EASE }}
+      transition={{ duration: reduced ? 0.01 : FADE_MS / 1000, ease: EASE }}
       aria-hidden={leaving}
     >
       <ShaderAnimation className="absolute inset-0 h-full w-full" />
@@ -97,7 +113,7 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
         }
         transition={
           leaving
-            ? { duration: 0.7, ease: EASE }
+            ? { duration: FADE_MS / 1000, ease: EASE }
             : {
                 opacity: { duration: 0.85, ease: EASE },
                 scale: { duration: 0.85, ease: EASE },
