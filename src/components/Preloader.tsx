@@ -37,7 +37,7 @@ export function Preloader({ onComplete }: PreloaderProps) {
   return (
     <motion.div
       className="fixed inset-0 z-100 overflow-hidden bg-void"
-      data-intro=""
+      data-intro="hold"
       initial={{ opacity: 1 }}
       animate={{ opacity: leaving ? 0 : 1 }}
       transition={{ duration: reduced ? 0.2 : FADE_MS / 1000, ease: EASE }}
