@@ -26,8 +26,7 @@ export const EVENT = {
     "This is a day party built for people who usually get turned away at the door. Nobody is checking whether you're old enough to drink, because nobody is drinking.",
 
   email: "passes@avionproductions.in",
-  instagram: "https://instagram.com/avion.productions",
-  youtube: "https://youtube.com/@avionproductions",
+  instagram: "https://www.instagram.com/avion.prod._/",
 
   holdMinutes: 30,
 } as const;

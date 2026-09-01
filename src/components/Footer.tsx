@@ -5,11 +5,10 @@ import { ArrowUpRight, Mail, MapPin } from "lucide-react";
 
 import { EVENT } from "@/lib/event";
 import { Reveal } from "./ui/Reveal";
-import { InstagramGlyph, YoutubeGlyph } from "./ui/SocialIcons";
+import { InstagramGlyph } from "./ui/SocialIcons";
 
 const SOCIALS = [
   { label: "INSTAGRAM", href: EVENT.instagram, icon: InstagramGlyph },
-  { label: "YOUTUBE", href: EVENT.youtube, icon: YoutubeGlyph },
 ];
 
 export function Footer() {
