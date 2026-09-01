@@ -7,7 +7,9 @@ import { ShaderAnimation } from "@/components/ui/shader-animation";
 import { EVENT } from "@/lib/event";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const EXTRUDE = 16;
+const EXTRUDE = 22;
+const TITLE_CLASS =
+  "font-display text-[clamp(4.2rem,18vw,11.5rem)] leading-none font-medium tracking-[-0.055em] whitespace-nowrap";
 /** One full shader ring cycle (~6.7s at 60fps) plus a beat to read the title. */
 const HOLD_MS = 7000;
 const FADE_MS = 900;
@@ -45,25 +47,42 @@ export function Preloader({ onComplete }: PreloaderProps) {
     >
       <ShaderAnimation className="absolute inset-0 h-full w-full" />
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_38%,rgba(3,3,7,0.72)_100%)]" />
+      {/* Deep vignette so the rings glow out of black instead of filling the frame. */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_26%,rgba(3,3,7,0.88)_92%)]" />
+      {/* Projector scanlines + grain, same room tone as the rest of the site. */}
+      <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(to_bottom,rgba(255,255,255,0.02)_0px,rgba(255,255,255,0.02)_1px,transparent_1px,transparent_4px)] opacity-60" />
+      <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.13] mix-blend-soft-light" />
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-6">
-        <motion.p
+        <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: leaving ? 0 : 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.12, ease: EASE }}
-          className="mb-8 font-mono text-[10px] tracking-[0.42em] text-bone/55 uppercase"
+          className="mb-9 flex items-center gap-4"
         >
-          {EVENT.host}
-        </motion.p>
+          <span className="h-px w-10 bg-gradient-to-r from-transparent to-electric-300/50 sm:w-16" />
+          <p className="font-mono text-[10px] tracking-[0.42em] text-electric-200/65 uppercase">
+            {EVENT.host}
+          </p>
+          <span className="h-px w-10 bg-gradient-to-l from-transparent to-electric-300/50 sm:w-16" />
+        </motion.div>
 
         <UtopiaTitle3D leaving={leaving} />
 
         <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: leaving ? 0 : 1 }}
+          transition={{ duration: 0.9, delay: 0.5, ease: EASE }}
+          className="font-display mt-9 text-lg text-bone/50 italic sm:text-xl"
+        >
+          {EVENT.subTagline}
+        </motion.p>
+
+        <motion.p
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: leaving ? 0 : 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.38, ease: EASE }}
-          className="mt-10 font-mono text-[9px] tracking-[0.36em] text-bone/45 uppercase"
+          transition={{ duration: 0.7, delay: 0.66, ease: EASE }}
+          className="mt-5 font-mono text-[9px] tracking-[0.36em] text-bone/40 uppercase"
         >
           {EVENT.shortDateLabel} · {EVENT.venueCode}
         </motion.p>
@@ -74,18 +93,18 @@ export function Preloader({ onComplete }: PreloaderProps) {
 
 function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
   return (
-    <div className="[perspective:1600px]">
+    <div className="[perspective:1500px]">
       <motion.div
         className="relative"
         style={{ transformStyle: "preserve-3d" }}
-        initial={{ opacity: 0, rotateX: 38, rotateY: -32, z: -120, scale: 0.86 }}
+        initial={{ opacity: 0, rotateX: 42, rotateY: -36, z: -160, scale: 0.82 }}
         animate={
           leaving
-            ? { opacity: 0, rotateX: 8, rotateY: 6, z: 80, scale: 1.06 }
+            ? { opacity: 0, rotateX: 6, rotateY: 8, z: 90, scale: 1.07 }
             : {
                 opacity: 1,
-                rotateX: [18, 12, 18],
-                rotateY: [-16, -9, -16],
+                rotateX: [20, 13, 20],
+                rotateY: [-18, -10, -18],
                 z: 0,
                 scale: 1,
               }
@@ -94,11 +113,11 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
           leaving
             ? { duration: FADE_MS / 1000, ease: EASE }
             : {
-                opacity: { duration: 0.85, ease: EASE },
-                scale: { duration: 0.85, ease: EASE },
-                z: { duration: 0.85, ease: EASE },
-                rotateX: { duration: 5.4, repeat: Infinity, ease: "easeInOut" },
-                rotateY: { duration: 5.4, repeat: Infinity, ease: "easeInOut" },
+                opacity: { duration: 1.0, ease: EASE },
+                scale: { duration: 1.0, ease: EASE },
+                z: { duration: 1.0, ease: EASE },
+                rotateX: { duration: 6.2, repeat: Infinity, ease: "easeInOut" },
+                rotateY: { duration: 6.2, repeat: Infinity, ease: "easeInOut" },
               }
         }
       >
@@ -110,18 +129,18 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
             <span
               key={i}
               aria-hidden={!face}
-              className="font-display absolute top-1/2 left-1/2 text-[clamp(4.2rem,18vw,11.5rem)] leading-none font-medium tracking-[-0.055em] whitespace-nowrap"
+              className={`${TITLE_CLASS} absolute top-1/2 left-1/2`}
               style={{
-                transform: `translate(-50%, -50%) translateZ(${-i * 2.4}px)`,
+                transform: `translate(-50%, -50%) translateZ(${-i * 2.6}px)`,
                 color: face
                   ? "#f7f7fb"
-                  : t < 0.28
-                    ? `rgba(188, 194, 255, ${0.7 - t})`
-                    : t < 0.55
-                      ? `rgba(96, 105, 240, ${0.55 - t * 0.35})`
-                      : "#14132a",
+                  : t < 0.2
+                    ? `rgba(188, 194, 255, ${0.62 - t})`
+                    : t < 0.5
+                      ? `rgba(91, 75, 255, ${0.5 - t * 0.4})`
+                      : `rgba(10, 9, 24, ${0.98 - t * 0.25})`,
                 textShadow: face
-                  ? "0 0 28px rgba(244,244,248,0.35), 0 0 70px rgba(125,139,255,0.45), 0 0 140px rgba(255,59,59,0.16)"
+                  ? "0 0 24px rgba(244,244,248,0.4), 0 0 65px rgba(125,139,255,0.5), 0 0 150px rgba(91,75,255,0.32), 0 0 220px rgba(255,59,59,0.12)"
                   : "none",
               }}
             >
@@ -129,9 +148,26 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
             </span>
           );
         })}
-        <span className="font-display invisible text-[clamp(4.2rem,18vw,11.5rem)] leading-none font-medium tracking-[-0.055em] whitespace-nowrap">
+
+        {/* Faint floor reflection to sell the object sitting in space. */}
+        <span
+          aria-hidden
+          className={`${TITLE_CLASS} absolute top-1/2 left-1/2`}
+          style={{
+            transform:
+              "translate(-50%, -50%) translateZ(-2px) translateY(96%) scaleY(-0.9)",
+            color: "rgba(125, 139, 255, 0.1)",
+            maskImage:
+              "linear-gradient(to bottom, transparent 18%, rgba(0,0,0,0.85) 100%)",
+            WebkitMaskImage:
+              "linear-gradient(to bottom, transparent 18%, rgba(0,0,0,0.85) 100%)",
+            filter: "blur(2px)",
+          }}
+        >
           {EVENT.name}
         </span>
+
+        <span className={`${TITLE_CLASS} invisible`}>{EVENT.name}</span>
       </motion.div>
     </div>
   );

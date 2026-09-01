@@ -43,15 +43,28 @@ export function ShaderAnimation({ className }: ShaderAnimationProps) {
         float t = time * 0.05;
         float lineWidth = 0.002;
 
-        vec3 color = vec3(0.0);
+        vec3 raw = vec3(0.0);
         for (int j = 0; j < 3; j++) {
           for (int i = 0; i < 5; i++) {
-            color[j] += lineWidth * float(i * i) /
+            raw[j] += lineWidth * float(i * i) /
               abs(fract(t - 0.01 * float(j) + float(i) * 0.01) * 5.0 - length(uv) + mod(uv.x + uv.y, 0.2));
           }
         }
 
-        gl_FragColor = vec4(color[0], color[1], color[2], 1.0);
+        // Regrade the RGB rings into the UTOPIA palette: deep periwinkle,
+        // violet haze, and a low ember of signal red on near-black.
+        vec3 color =
+          raw.r * vec3(0.30, 0.36, 0.98) +
+          raw.g * vec3(0.42, 0.30, 0.95) * 0.62 +
+          raw.b * vec3(0.95, 0.22, 0.30) * 0.24;
+
+        color *= 0.78;
+        // Crush the shadows so the field stays cinematic, not neon-rainbow.
+        color = pow(color, vec3(1.18));
+        // Vignette into the void.
+        color *= smoothstep(2.1, 0.35, length(uv));
+
+        gl_FragColor = vec4(color, 1.0);
       }
     `;
 
