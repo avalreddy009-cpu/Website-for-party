@@ -10,9 +10,9 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 const EXTRUDE = 22;
 const TITLE_CLASS =
   "font-display text-[clamp(4.2rem,18vw,11.5rem)] leading-none font-medium tracking-[-0.055em] whitespace-nowrap";
-/** One full shader ring cycle (~6.7s at 60fps) plus a beat to read the title. */
-const HOLD_MS = 7000;
-const FADE_MS = 900;
+/** Long enough to read UTOPIA, short enough not to drag. Total ~4.5s. */
+const HOLD_MS = 3700;
+const FADE_MS = 800;
 
 type PreloaderProps = {
   onComplete: () => void;
@@ -72,7 +72,7 @@ export function Preloader({ onComplete }: PreloaderProps) {
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: leaving ? 0 : 1 }}
-          transition={{ duration: 0.9, delay: 0.5, ease: EASE }}
+          transition={{ duration: 0.6, delay: 0.32, ease: EASE }}
           className="font-display mt-9 text-lg text-bone/50 italic sm:text-xl"
         >
           {EVENT.subTagline}
@@ -81,7 +81,7 @@ export function Preloader({ onComplete }: PreloaderProps) {
         <motion.p
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: leaving ? 0 : 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.66, ease: EASE }}
+          transition={{ duration: 0.5, delay: 0.44, ease: EASE }}
           className="mt-5 font-mono text-[9px] tracking-[0.36em] text-bone/40 uppercase"
         >
           {EVENT.shortDateLabel} · {EVENT.venueCode}
@@ -113,11 +113,11 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
           leaving
             ? { duration: FADE_MS / 1000, ease: EASE }
             : {
-                opacity: { duration: 1.0, ease: EASE },
-                scale: { duration: 1.0, ease: EASE },
-                z: { duration: 1.0, ease: EASE },
-                rotateX: { duration: 6.2, repeat: Infinity, ease: "easeInOut" },
-                rotateY: { duration: 6.2, repeat: Infinity, ease: "easeInOut" },
+                opacity: { duration: 0.75, ease: EASE },
+                scale: { duration: 0.75, ease: EASE },
+                z: { duration: 0.75, ease: EASE },
+                rotateX: { duration: 3.6, repeat: Infinity, ease: "easeInOut" },
+                rotateY: { duration: 3.6, repeat: Infinity, ease: "easeInOut" },
               }
         }
       >
