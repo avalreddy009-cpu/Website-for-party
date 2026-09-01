@@ -48,7 +48,7 @@ export function Preloader({ onComplete }: PreloaderProps) {
       <ShaderAnimation className="absolute inset-0 h-full w-full" />
 
       {/* Deep vignette so the rings glow out of black instead of filling the frame. */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_26%,rgba(3,3,7,0.88)_92%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_32%,rgba(3,3,7,0.78)_94%)]" />
       {/* Projector scanlines + grain, same room tone as the rest of the site. */}
       <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(to_bottom,rgba(255,255,255,0.02)_0px,rgba(255,255,255,0.02)_1px,transparent_1px,transparent_4px)] opacity-60" />
       <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.13] mix-blend-soft-light" />
@@ -133,14 +133,14 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
               style={{
                 transform: `translate(-50%, -50%) translateZ(${-i * 2.6}px)`,
                 color: face
-                  ? "#f7f7fb"
-                  : t < 0.2
-                    ? `rgba(188, 194, 255, ${0.62 - t})`
+                  ? "#07080e"
+                  : t < 0.22
+                    ? `rgba(18, 16, 38, ${0.92 - t * 0.3})`
                     : t < 0.5
-                      ? `rgba(91, 75, 255, ${0.5 - t * 0.4})`
-                      : `rgba(10, 9, 24, ${0.98 - t * 0.25})`,
+                      ? `rgba(28, 26, 58, ${0.8 - t * 0.25})`
+                      : `rgba(8, 7, 18, ${0.98 - t * 0.2})`,
                 textShadow: face
-                  ? "0 0 24px rgba(244,244,248,0.4), 0 0 65px rgba(125,139,255,0.5), 0 0 150px rgba(91,75,255,0.32), 0 0 220px rgba(255,59,59,0.12)"
+                  ? "0 1px 0 rgba(244,244,248,0.08), 0 0 28px rgba(3,3,7,0.55)"
                   : "none",
               }}
             >
@@ -156,7 +156,7 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
           style={{
             transform:
               "translate(-50%, -50%) translateZ(-2px) translateY(96%) scaleY(-0.9)",
-            color: "rgba(125, 139, 255, 0.1)",
+            color: "rgba(7, 8, 14, 0.28)",
             maskImage:
               "linear-gradient(to bottom, transparent 18%, rgba(0,0,0,0.85) 100%)",
             WebkitMaskImage:
