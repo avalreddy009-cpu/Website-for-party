@@ -22,46 +22,25 @@ export function Preloader({ onComplete }: PreloaderProps) {
   const finished = useRef(false);
 
   useEffect(() => {
-    if (reduced) {
-      const timeout = window.setTimeout(() => {
-        if (finished.current) return;
-        finished.current = true;
-        onComplete();
-      }, 80);
-      return () => window.clearTimeout(timeout);
-    }
-
-    let lift = 0;
-    let done = 0;
-    let cancelled = false;
-
-    // Clock starts after the first painted frame so WebGL boot doesn't eat the hold.
-    const arm = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (cancelled) return;
-        lift = window.setTimeout(() => setLeaving(true), HOLD_MS);
-        done = window.setTimeout(() => {
-          if (finished.current) return;
-          finished.current = true;
-          onComplete();
-        }, HOLD_MS + FADE_MS);
-      });
-    });
-
+    const lift = window.setTimeout(() => setLeaving(true), HOLD_MS);
+    const done = window.setTimeout(() => {
+      if (finished.current) return;
+      finished.current = true;
+      onComplete();
+    }, HOLD_MS + FADE_MS);
     return () => {
-      cancelled = true;
-      cancelAnimationFrame(arm);
       window.clearTimeout(lift);
       window.clearTimeout(done);
     };
-  }, [onComplete, reduced]);
+  }, [onComplete]);
 
   return (
     <motion.div
       className="fixed inset-0 z-100 overflow-hidden bg-void"
+      data-intro=""
       initial={{ opacity: 1 }}
       animate={{ opacity: leaving ? 0 : 1 }}
-      transition={{ duration: reduced ? 0.01 : FADE_MS / 1000, ease: EASE }}
+      transition={{ duration: reduced ? 0.2 : FADE_MS / 1000, ease: EASE }}
       aria-hidden={leaving}
     >
       <ShaderAnimation className="absolute inset-0 h-full w-full" />
