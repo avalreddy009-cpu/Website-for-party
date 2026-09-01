@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Ban, IdCard, Martini, Wallet } from "lucide-react";
+import { Ban, Martini, Wallet } from "lucide-react";
 
 import { EVENT } from "@/lib/event";
 import { Reveal, SectionLabel } from "./ui/Reveal";
@@ -21,13 +21,6 @@ const RULES = [
     short: "Bring a flask and it becomes our flask.",
     long: "Anything found gets confiscated and you go home, in front of everyone, at 2 in the afternoon. Sober people dance better anyway. Don't make it weird.",
     tone: "signal" as const,
-  },
-  {
-    icon: IdCard,
-    title: "Bring an ID anyway.",
-    short: "Any ID. School, college, Aadhaar, library card energy.",
-    long: "It's not an age gate — nobody's drinking. We just need the name on your pass to match a human at the door so nobody resells their way in.",
-    tone: "calm" as const,
   },
   {
     icon: Wallet,
@@ -54,7 +47,7 @@ export function HouseRules() {
           </Reveal>
           <Reveal delay={0.08}>
             <h2 className="font-display mt-8 text-4xl leading-[1.05] font-light text-bone sm:text-5xl">
-              Four rules.
+              Three rules.
               <span className="block text-bone/45 italic">
                 Two of them are the same rule.
               </span>
