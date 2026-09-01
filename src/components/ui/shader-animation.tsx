@@ -87,7 +87,18 @@ export function ShaderAnimation({ className }: ShaderAnimationProps) {
 
     scene.add(new THREE.Mesh(geometry, material));
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    } catch {
+      // No WebGL (headless browsers, blocked GPU). Fall back to a still
+      // gradient so the intro keeps its timing instead of crashing the tree.
+      geometry.dispose();
+      material.dispose();
+      container.style.background =
+        "radial-gradient(ellipse at center, rgba(48,58,157,0.5) 0%, rgba(23,20,64,0.55) 38%, #030307 78%)";
+      return;
+    }
     renderer.setClearColor(0x000000, 1);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.domElement.style.display = "block";
