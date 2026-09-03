@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
+import { formatCartLabel, orderLines } from "@/lib/cart";
 import { passQrPayload, qrDataUrl } from "@/server/pass-code";
 import { getBuyerSession } from "@/server/admin-session";
 import { readPassWallet } from "@/server/pass-wallet";
-import { hydrateStore, importWalletPass, listOrdersByEmail, type Order } from "@/server/store";
+import { hydrateStore, importWalletPass, listOrdersByEmail, ticketsForOrder, type Order } from "@/server/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,14 +39,27 @@ export async function GET() {
 
   const payload = await Promise.all(
     orders.map(async (order) => {
-      let passQr: string | undefined;
-      if (order.status === "paid" && order.passCode) {
-        try {
-          passQr = await qrDataUrl(passQrPayload(order));
-        } catch {
-          passQr = undefined;
-        }
-      }
+      const tickets =
+        order.status === "paid"
+          ? await Promise.all(
+              ticketsForOrder(order).map(async (ticket) => {
+                let passQr: string | undefined;
+                try {
+                  passQr = await qrDataUrl(passQrPayload(order, ticket));
+                } catch {
+                  passQr = undefined;
+                }
+                return {
+                  id: ticket.id,
+                  passId: ticket.passId,
+                  passCode: ticket.passCode,
+                  enteredAt: ticket.enteredAt,
+                  passQr,
+                };
+              }),
+            )
+          : [];
+      const first = tickets[0];
       return {
         reference: order.reference,
         passId: order.passId,
@@ -53,10 +67,12 @@ export async function GET() {
         total: order.total,
         status: order.status,
         createdAt: order.createdAt,
-        passCode: order.status === "paid" ? order.passCode : undefined,
+        label: formatCartLabel(orderLines(order)),
+        passCode: first?.passCode,
         enteredAt: order.enteredAt,
         utr: order.utr,
-        passQr,
+        passQr: first?.passQr,
+        tickets,
       };
     }),
   );

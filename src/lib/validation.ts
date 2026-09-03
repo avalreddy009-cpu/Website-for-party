@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { cartCount, cartFromUnknown } from "./cart";
 import { MAX_QUANTITY, PASSES, type PassId } from "./passes";
 
 const passIds = PASSES.map((pass) => pass.id) as [PassId, ...PassId[]];
@@ -31,14 +32,32 @@ export const buyerSchema = z.object({
   phone: phoneSchema,
 });
 
-export const orderIntentSchema = buyerSchema.extend({
-  passId: z.enum(passIds),
-  quantity: z.coerce
-    .number()
-    .int()
-    .min(1, "You need at least one pass")
-    .max(MAX_QUANTITY, `Max ${MAX_QUANTITY} passes per order`),
-});
+const qtyField = z.coerce.number().int().min(0).max(MAX_QUANTITY);
+
+export const orderIntentSchema = buyerSchema
+  .extend({
+    passId: z.enum(passIds).optional(),
+    quantity: qtyField.optional(),
+    early: qtyField.optional(),
+    vip: qtyField.optional(),
+  })
+  .superRefine((data, ctx) => {
+    const total = cartCount(cartFromUnknown(data));
+    if (total < 1) {
+      ctx.addIssue({
+        code: "custom",
+        message: "You need at least one pass",
+        path: ["quantity"],
+      });
+    }
+    if (total > MAX_QUANTITY) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Max ${MAX_QUANTITY} passes per order`,
+        path: ["quantity"],
+      });
+    }
+  });
 
 export const confirmCodeSchema = z.object({
   email: emailSchema,

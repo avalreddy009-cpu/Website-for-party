@@ -31,6 +31,13 @@ import {
 
 import { EVENT, formatPrice } from "@/lib/event";
 import {
+  cartCount,
+  formatCartLabel,
+  seedCart,
+  setCartQty,
+  type CartQty,
+} from "@/lib/cart";
+import {
   compressPaymentScreenshot,
   isCompleteUtr,
   normalizeUtr,
@@ -39,12 +46,12 @@ import {
 import { UPI_APPS, upiAppHref } from "@/lib/upi-apps";
 import {
   MAX_QUANTITY,
-  type PassId,
   type PassTier,
 } from "@/lib/passes";
-import { priceOrder } from "@/lib/pricing";
+import { priceCart } from "@/lib/pricing";
 import { usePassCatalog } from "@/lib/usePassCatalog";
 import { useNow } from "@/lib/useNow";
+import { TermsModal } from "./TermsModal";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const STEPS = ["PASS", "DETAILS", "VERIFY", "CONFIRM", "PAY", "DONE"] as const;
@@ -210,11 +217,11 @@ function CheckoutFlow({
 
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
-  const [tierId, setTierId] = useState<PassId>(initialPass.id);
-  const [quantity, setQuantity] = useState(1);
+  const [cart, setCart] = useState<CartQty>(() => seedCart(initialPass.id));
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<Errors>({});
   const [agreed, setAgreed] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [code, setCode] = useState("");
@@ -225,13 +232,12 @@ function CheckoutFlow({
   const [copied, setCopied] = useState(false);
   const [utr, setUtr] = useState("");
   const [proof, setProof] = useState<PaymentScreenshot | null>(null);
-  const { catalog, byId } = usePassCatalog();
-
+  const { catalog, prices, byId } = usePassCatalog();
+  const quantity = cartCount(cart);
+  const tierId = cart.vip > 0 && cart.early === 0 ? "vip" : cart.early > 0 && cart.vip === 0 ? "early" : initialPass.id;
   const tier = byId(tierId);
-  const totals = useMemo(
-    () => priceOrder(tierId, quantity, tier.price),
-    [tierId, quantity, tier.price],
-  );
+  const totals = useMemo(() => priceCart(cart, prices), [cart, prices]);
+  const cartLabel = formatCartLabel(totals.lines);
 
   const resendIn =
     resendAt && now ? Math.max(0, Math.ceil((resendAt - now) / 1000)) : 0;
@@ -260,7 +266,7 @@ function CheckoutFlow({
       const result = await postJson<{
         resendAfterSeconds: number;
         devCode?: string;
-      }>("/api/passes/verify", { ...form, passId: tierId, quantity });
+      }>("/api/passes/verify", { ...form, early: cart.early, vip: cart.vip });
       setBusyState(false);
 
       if (!result.ok) {
@@ -273,7 +279,7 @@ function CheckoutFlow({
       setCode("");
       if (!isResend) goTo(2);
     },
-    [form, goTo, quantity, setBusyState, tierId],
+    [form, goTo, cart, setBusyState],
   );
 
   /**
@@ -325,8 +331,8 @@ function CheckoutFlow({
     setErrors({});
     const result = await postJson<Reservation>("/api/passes/reserve", {
       ...form,
-      passId: tierId,
-      quantity,
+      early: cart.early,
+      vip: cart.vip,
       verificationToken: token,
     });
     setBusyState(false);
@@ -338,7 +344,7 @@ function CheckoutFlow({
     setReservation(result.data);
     setDirection(1);
     setStep(4);
-  }, [agreed, form, goTo, quantity, reservation, setBusyState, tierId, token]);
+  }, [agreed, form, goTo, cart, reservation, setBusyState, token]);
 
   const submitPay = useCallback(async () => {
     if (!token || !reservation) {
@@ -458,7 +464,7 @@ function CheckoutFlow({
             id={headingId}
             className="font-display mt-2 text-2xl leading-none font-light text-bone sm:text-3xl"
           >
-            {step === 5 ? "You're on the list" : tier.name}
+            {step === 5 ? "You're on the list" : cart.early > 0 && cart.vip > 0 ? "Mixed passes" : tier.name}
           </h2>
         </div>
         <button
@@ -512,10 +518,8 @@ function CheckoutFlow({
             {step === 0 && (
               <StepPass
                 catalog={catalog}
-                tierId={tierId}
-                onTierChange={setTierId}
-                quantity={quantity}
-                onQuantityChange={setQuantity}
+                cart={cart}
+                onCartChange={setCart}
                 subtotal={totals.subtotal}
               />
             )}
@@ -552,11 +556,13 @@ function CheckoutFlow({
             {step === 3 && (
               <StepConfirm
                 tier={tier}
+                cartLabel={cartLabel}
                 quantity={quantity}
                 form={form}
                 totals={totals}
                 agreed={agreed}
                 error={errors.terms}
+                onOpenTerms={() => setTermsOpen(true)}
                 onAgreedChange={(value) => {
                   setAgreed(value);
                   setErrors((prev) => ({ ...prev, terms: undefined }));
@@ -587,6 +593,7 @@ function CheckoutFlow({
             {step === 5 && reservation && (
               <StepDone
                 tier={tier}
+                cartLabel={cartLabel}
                 quantity={quantity}
                 form={form}
                 reservation={reservation}
@@ -612,13 +619,23 @@ function CheckoutFlow({
         </AnimatePresence>
       </div>
 
+      <TermsModal
+        open={termsOpen}
+        onClose={() => setTermsOpen(false)}
+        onAccept={() => {
+          setAgreed(true);
+          setErrors((prev) => ({ ...prev, terms: undefined }));
+          setTermsOpen(false);
+        }}
+      />
+
       {/* ------------------------------ footer ----------------------------- */}
       <div className="relative border-t border-white/8 bg-black/25 px-6 py-5 sm:px-8">
         {step < 5 ? (
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="font-mono text-[8px] tracking-[0.24em] text-bone/35 uppercase">
-                {quantity} × {tier.name}
+                {cartLabel}
               </p>
               <motion.p
                 key={totals.total}
@@ -707,17 +724,13 @@ function CheckoutFlow({
 
 function StepPass({
   catalog,
-  tierId,
-  onTierChange,
-  quantity,
-  onQuantityChange,
+  cart,
+  onCartChange,
   subtotal,
 }: {
   catalog: PassTier[];
-  tierId: PassId;
-  onTierChange: (id: PassId) => void;
-  quantity: number;
-  onQuantityChange: (qty: number) => void;
+  cart: CartQty;
+  onCartChange: (cart: CartQty) => void;
   subtotal: number;
 }) {
   return (
@@ -725,19 +738,18 @@ function StepPass({
       <div>
         <StepTitle
           eyebrow="STEP 01"
-          title="Which one?"
-          hint="Change your mind here, it's free."
+          title="Build the bag"
+          hint={`Early Bird, VIP, or both — one payment. Up to ${MAX_QUANTITY} passes.`}
         />
         <div className="mt-5 grid gap-2.5">
           {catalog.map((option) => {
-            const active = option.id === tierId;
+            const qty = cart[option.id];
+            const active = qty > 0;
             return (
-              <button
+              <motion.div
                 key={option.id}
-                type="button"
-                onClick={() => onTierChange(option.id)}
-                aria-pressed={active}
-                className="group relative flex items-center justify-between gap-4 overflow-hidden rounded-2xl border px-4 py-4 text-left transition-all duration-300"
+                layout
+                className="relative overflow-hidden rounded-2xl border px-4 py-4"
                 style={{
                   borderColor: active ? option.accentSoft : "rgba(255,255,255,0.09)",
                   background: active
@@ -747,93 +759,67 @@ function StepPass({
               >
                 {active && (
                   <motion.span
-                    layoutId="tier-highlight"
-                    className="absolute inset-0"
+                    layoutId={`tier-glow-${option.id}`}
+                    className="pointer-events-none absolute inset-0"
                     style={{
                       background: `linear-gradient(110deg, ${option.accentSoft}, transparent 62%)`,
-                      opacity: 0.3,
+                      opacity: 0.32,
                     }}
-                    transition={{ duration: 0.5, ease: EASE }}
                   />
                 )}
-                <span className="relative flex items-center gap-3.5">
-                  <span
-                    className="flex size-5 items-center justify-center rounded-full border transition-colors duration-300"
-                    style={{
-                      borderColor: active ? option.accent : "rgba(255,255,255,0.25)",
-                      background: active ? option.accent : "transparent",
-                    }}
-                  >
-                    {active && <Check className="size-3 text-void" strokeWidth={3.5} />}
-                  </span>
-                  <span>
-                    <span className="font-display block text-lg leading-tight text-bone">
+                <div className="relative flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-display text-lg leading-tight text-bone">
                       {option.name}
-                    </span>
-                    <span className="font-mono text-[8px] tracking-[0.22em] text-bone/40 uppercase">
-                      {option.subtitle}
-                    </span>
-                  </span>
-                </span>
-                <span className="font-display relative text-xl font-light text-bone tabular-nums">
-                  {formatPrice(option.price)}
-                </span>
-              </button>
+                    </p>
+                    <p className="font-mono text-[8px] tracking-[0.22em] text-bone/40 uppercase">
+                      {option.subtitle} · {formatPrice(option.price)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <QtyButton
+                      label={`Fewer ${option.name} passes`}
+                      disabled={qty <= 0 || cartCount(cart) <= 1}
+                      onClick={() => onCartChange(setCartQty(cart, option.id, qty - 1))}
+                    >
+                      <Minus className="size-4" />
+                    </QtyButton>
+                    <div className="flex h-9 w-10 items-center justify-center overflow-hidden">
+                      <AnimatePresence mode="popLayout" initial={false}>
+                        <motion.span
+                          key={`${option.id}-${qty}`}
+                          initial={{ y: 18, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          exit={{ y: -18, opacity: 0 }}
+                          transition={{ duration: 0.24, ease: EASE }}
+                          className="font-display text-2xl leading-none font-light text-bone tabular-nums"
+                        >
+                          {String(qty).padStart(2, "0")}
+                        </motion.span>
+                      </AnimatePresence>
+                    </div>
+                    <QtyButton
+                      label={`More ${option.name} passes`}
+                      disabled={cartCount(cart) >= MAX_QUANTITY}
+                      onClick={() => onCartChange(setCartQty(cart, option.id, qty + 1))}
+                    >
+                      <Plus className="size-4" />
+                    </QtyButton>
+                  </div>
+                </div>
+              </motion.div>
             );
           })}
         </div>
       </div>
 
-      <div>
-        <StepTitle
-          eyebrow="STEP 01B"
-          title="How many of you?"
-          hint={`Up to ${MAX_QUANTITY} per order. Bigger group? Email us.`}
-        />
-
-        <div className="mt-5 flex items-center justify-between gap-5 rounded-2xl border border-white/9 bg-white/2 px-5 py-4">
-          <div className="flex items-center gap-4">
-            <QtyButton
-              label="Decrease quantity"
-              disabled={quantity <= 1}
-              onClick={() => onQuantityChange(Math.max(1, quantity - 1))}
-            >
-              <Minus className="size-4" />
-            </QtyButton>
-
-            <div className="flex h-10 w-14 items-center justify-center overflow-hidden">
-              <AnimatePresence mode="popLayout" initial={false}>
-                <motion.span
-                  key={quantity}
-                  initial={{ y: 22, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: -22, opacity: 0 }}
-                  transition={{ duration: 0.28, ease: EASE }}
-                  className="font-display text-4xl leading-none font-light text-bone tabular-nums"
-                >
-                  {String(quantity).padStart(2, "0")}
-                </motion.span>
-              </AnimatePresence>
-            </div>
-
-            <QtyButton
-              label="Increase quantity"
-              disabled={quantity >= MAX_QUANTITY}
-              onClick={() => onQuantityChange(Math.min(MAX_QUANTITY, quantity + 1))}
-            >
-              <Plus className="size-4" />
-            </QtyButton>
-          </div>
-
-          <div className="text-right">
-            <p className="font-mono text-[8px] tracking-[0.22em] text-bone/35 uppercase">
-              SUBTOTAL
-            </p>
-            <p className="font-display text-xl font-light text-bone tabular-nums sm:text-2xl">
-              {formatPrice(subtotal)}
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center justify-between rounded-2xl border border-white/9 bg-white/2 px-5 py-4">
+        <p className="font-mono text-[8px] tracking-[0.22em] text-bone/35 uppercase">
+          {cartCount(cart)} {cartCount(cart) === 1 ? "pass" : "passes"} · each QR is unique
+        </p>
+        <p className="font-display text-xl font-light text-bone tabular-nums sm:text-2xl">
+          {formatPrice(subtotal)}
+        </p>
       </div>
     </div>
   );
@@ -1184,23 +1170,27 @@ function StepVerify({
 
 function StepConfirm({
   tier,
+  cartLabel,
   quantity,
   form,
   totals,
   agreed,
   error,
+  onOpenTerms,
   onAgreedChange,
 }: {
   tier: PassTier;
+  cartLabel: string;
   quantity: number;
   form: FormState;
   totals: { subtotal: number; fee: number; total: number };
   agreed: boolean;
   error?: string;
+  onOpenTerms: () => void;
   onAgreedChange: (value: boolean) => void;
 }) {
   const rows = [
-    { label: "PASS", value: `${tier.name} — ${tier.subtitle}` },
+    { label: "PASS", value: cartLabel },
     { label: "QUANTITY", value: `${quantity} ${quantity > 1 ? "passes" : "pass"}` },
     { label: "NAME", value: form.name },
     { label: "EMAIL", value: form.email },
@@ -1252,7 +1242,10 @@ function StepConfirm({
 
       <button
         type="button"
-        onClick={() => onAgreedChange(!agreed)}
+        onClick={() => {
+          if (agreed) onAgreedChange(false);
+          else onOpenTerms();
+        }}
         aria-pressed={agreed}
         className="mt-5 flex w-full items-start gap-3 text-left"
       >
@@ -1281,11 +1274,27 @@ function StepConfirm({
             )}
           </AnimatePresence>
         </motion.span>
-        <span className="text-[11px] leading-relaxed text-bone/55">
-          I&apos;m bringing an ID, I know passes aren&apos;t refundable, and I
-          understand this is a completely dry event — no alcohol in, none served,
-          bags get checked.{" "}
-          {error && <span className="text-signal-soft">{error}</span>}
+        <span className="text-[13px] leading-relaxed text-bone/70">
+          I accept the{" "}
+          <span
+            role="link"
+            tabIndex={0}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenTerms();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenTerms();
+              }
+            }}
+            className="text-signal underline decoration-signal/70 underline-offset-4"
+          >
+            Terms and Conditions
+          </span>
+          {error && <span className="mt-1 block text-signal-soft">{error}</span>}
         </span>
       </button>
     </div>
@@ -1513,6 +1522,7 @@ function StepPay({
 
 function StepDone({
   tier,
+  cartLabel,
   quantity,
   form,
   reservation,
@@ -1520,6 +1530,7 @@ function StepDone({
   onCopy,
 }: {
   tier: PassTier;
+  cartLabel: string;
   quantity: number;
   form: FormState;
   reservation: Reservation;
@@ -1566,9 +1577,9 @@ function StepDone({
         transition={{ duration: 0.6, delay: 0.3 }}
         className="mt-3 max-w-sm text-sm leading-relaxed text-bone/55"
       >
-        {quantity} × {tier.name} is with us for{" "}
+        {cartLabel} is with us for{" "}
         {form.name.split(" ")[0] || "you"}. We&apos;re checking the UPI
-        screenshot. When it clears, the pass QR lands in{" "}
+        screenshot. When it clears, {quantity > 1 ? "each pass gets its own QR in " : "the pass QR lands in "}
         <span className="text-bone/85">{form.email}</span>.
       </motion.p>
 
@@ -1596,7 +1607,7 @@ function StepDone({
             <div className="mt-4 grid grid-cols-2 gap-3">
               <StubCell label="DATE" value="SUN 27 SEP" />
               <StubCell label="DOORS" value="12:00 PM" />
-              <StubCell label="PASS" value={tier.name} />
+              <StubCell label="PASS" value={cartLabel} />
               <StubCell label="TOTAL" value={formatPrice(reservation.total)} />
             </div>
           </div>

@@ -29,7 +29,7 @@ export function PassTiers({ onBuy }: PassTiersProps) {
             <h2 className="font-display mt-8 text-4xl leading-[1.05] font-light text-bone sm:text-6xl">
               Two passes.
               <span className="block text-bone/45 italic">
-                One of them has a table.
+                Mix them in one checkout.
               </span>
             </h2>
           </Reveal>
@@ -38,8 +38,8 @@ export function PassTiers({ onBuy }: PassTiersProps) {
         <Reveal delay={0.18} className="max-w-sm">
           <p className="text-sm leading-relaxed text-bone/55">
             Early Bird is the cheapest this gets — the price goes up when it
-            sells out, not when we feel like it. Flip a card to see exactly
-            what&apos;s included before you pay anything.
+            sells out, not when we feel like it. Want a table for some of you
+            and floor for the rest? Buy both passes in the same checkout.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3 font-mono text-[9px] tracking-[0.22em] text-bone/40 uppercase">
             <span className="flex items-center gap-2">

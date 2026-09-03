@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { orderLines, type OrderLine } from "@/lib/cart";
 import type { PassId } from "@/lib/passes";
 import { DEFAULT_PASS_PRICES } from "@/lib/passes";
 import { isJpegDataUrl } from "./jpeg";
@@ -63,6 +64,16 @@ export type Order = {
   transferHistory?: TransferRecord[];
   revokedPassCodes?: string[];
   hasPaymentProof?: boolean;
+  lines?: OrderLine[];
+  tickets?: PassTicket[];
+};
+
+export type PassTicket = {
+  id: string;
+  passId: PassId;
+  passCode: string;
+  qrToken: string;
+  enteredAt?: number;
 };
 
 export type ScanResult = "admitted" | "already-in" | "invalid" | "unpaid" | "rejected";
@@ -72,6 +83,7 @@ export type ScanLog = {
   orderId?: string;
   reference?: string;
   passCode?: string;
+  ticketId?: string;
   name?: string;
   email?: string;
   result: ScanResult;
@@ -551,8 +563,36 @@ export function listOrdersByEmail(email: string): Order[] {
 
 export function countPassesSold(passId: PassId): number {
   return listOrders()
-    .filter((order) => order.passId === passId && order.status === "paid")
-    .reduce((sum, order) => sum + order.quantity, 0);
+    .filter((order) => order.status === "paid")
+    .reduce((sum, order) => {
+      return (
+        sum +
+        orderLines(order)
+          .filter((line) => line.passId === passId)
+          .reduce((lineSum, line) => lineSum + line.quantity, 0)
+      );
+    }, 0);
+}
+
+export function ticketsForOrder(order: Order): PassTicket[] {
+  if (order.tickets && order.tickets.length > 0) return order.tickets;
+  if (order.passCode) {
+    return [
+      {
+        id: "legacy",
+        passId: order.passId,
+        passCode: order.passCode,
+        qrToken: order.qrToken ?? "",
+        enteredAt: order.enteredAt,
+      },
+    ];
+  }
+  return [];
+}
+
+export function orderHasEntry(order: Order): boolean {
+  if (order.tickets?.some((ticket) => ticket.enteredAt)) return true;
+  return Boolean(order.enteredAt);
 }
 
 export type PaymentProofResult =
@@ -591,10 +631,53 @@ export type DecisionResult =
 
 const DECIDED_STATUSES: OrderStatus[] = ["paid", "rejected", "cancelled"];
 
+function usedPassCodes(): Set<string> {
+  const used = new Set<string>();
+  for (const order of Object.values(db.orders)) {
+    if (order.passCode) used.add(order.passCode);
+    for (const ticket of order.tickets ?? []) used.add(ticket.passCode);
+    for (const code of order.revokedPassCodes ?? []) used.add(code);
+  }
+  return used;
+}
+
+function mintUniqueCode(email: string, phone: string, salt: string, used: Set<string>): string {
+  for (let i = 0; i < 48; i++) {
+    const code = derivePassDigits(email, phone, `${salt}:${i}`);
+    if (!used.has(code)) {
+      used.add(code);
+      return code;
+    }
+  }
+  const fallback = String(randomBytes(4).readUInt32BE(0) % 1_000_000).padStart(6, "0");
+  used.add(fallback);
+  return fallback;
+}
+
 function mintPass(order: Order): void {
-  const passCode = derivePassDigits(order.buyer.email, order.buyer.phone, order.id);
-  order.passCode = passCode;
-  order.qrToken = signPurposeToken("pass-qr", `${order.id}:${passCode}`, PASS_QR_TTL_MS);
+  const lines = orderLines(order);
+  const used = usedPassCodes();
+  const tickets: PassTicket[] = [];
+  for (const line of lines) {
+    for (let i = 0; i < line.quantity; i++) {
+      const id = randomBytes(6).toString("base64url");
+      const passCode = mintUniqueCode(
+        order.buyer.email,
+        order.buyer.phone,
+        `${order.id}:${id}`,
+        used,
+      );
+      tickets.push({
+        id,
+        passId: line.passId,
+        passCode,
+        qrToken: signPurposeToken("pass-qr", `${order.id}:${passCode}`, PASS_QR_TTL_MS),
+      });
+    }
+  }
+  order.tickets = tickets;
+  order.passCode = tickets[0]?.passCode;
+  order.qrToken = tickets[0]?.qrToken;
 }
 
 /**
@@ -652,7 +735,7 @@ export function transferOrder(
   const order = db.orders[id];
   if (!order) return { ok: false, reason: "not-found" };
   if (order.status !== "paid") return { ok: false, reason: "not-paid" };
-  if (order.enteredAt) return { ok: false, reason: "already-entered" };
+  if (orderHasEntry(order)) return { ok: false, reason: "already-entered" };
 
   const next = {
     name: buyer.name.trim(),
@@ -666,22 +749,25 @@ export function transferOrder(
   if (samePerson) return { ok: false, reason: "unchanged" };
 
   const previousBuyer = { ...order.buyer };
-  const previousPassCode = order.passCode;
+  const previousCodes = [
+    order.passCode,
+    ...(order.tickets ?? []).map((item) => item.passCode),
+  ].filter((code): code is string => Boolean(code));
   const record: TransferRecord = {
     at: Date.now(),
     by: transferredBy ?? "cms",
     from: previousBuyer,
-    previousPassCode,
+    previousPassCode: previousCodes[0],
   };
 
   order.buyer = next;
   order.transferredAt = record.at;
   order.transferredBy = record.by;
   order.transferHistory = [...(order.transferHistory ?? []), record].slice(-20);
-  if (previousPassCode) {
+  if (previousCodes.length > 0) {
     const revoked = new Set(order.revokedPassCodes ?? []);
-    revoked.add(previousPassCode);
-    order.revokedPassCodes = [...revoked].slice(-40);
+    for (const code of previousCodes) revoked.add(code);
+    order.revokedPassCodes = [...revoked].slice(-80);
   }
   mintPass(order);
   persist();
@@ -725,32 +811,57 @@ export function parseScanPayload(raw: string): { token?: string; code?: string; 
 export type ScanPassResult = {
   result: ScanResult;
   order?: Order;
+  ticket?: PassTicket;
   scan: ScanLog;
 };
+
+function orderMatchesCode(order: Order, code: string): boolean {
+  if (order.passCode === code) return true;
+  return Boolean(order.tickets?.some((ticket) => ticket.passCode === code));
+}
 
 export function scanPass(raw: string, scannedBy: string): ScanPassResult {
   const parsed = parseScanPayload(raw);
   let order: Order | undefined;
+  let ticket: PassTicket | undefined;
 
   if (parsed.token) {
     const decoded = verifyPassToken(parsed.token);
     if (decoded) {
       const candidate = db.orders[decoded.orderId];
-      if (candidate && candidate.passCode === decoded.passCode) {
-        order = candidate;
+      if (candidate) {
+        const match = ticketsForOrder(candidate).find(
+          (item) => item.passCode === decoded.passCode,
+        );
+        if (match) {
+          order = candidate;
+          ticket = match;
+        }
       }
     }
   }
 
   if (!order && parsed.reference) {
-    order = getOrderByReference(parsed.reference);
+    const candidate = getOrderByReference(parsed.reference);
+    if (candidate) {
+      const tickets = ticketsForOrder(candidate);
+      if (tickets.length <= 1) {
+        order = candidate;
+        ticket = tickets[0];
+      }
+    }
   }
 
   if (!order && parsed.code) {
-    const matches = Object.values(db.orders).filter((item) => item.passCode === parsed.code);
+    const matches = Object.values(db.orders).filter((item) =>
+      orderMatchesCode(item, parsed.code!),
+    );
     const paid = matches.filter((item) => item.status === "paid");
-    if (paid.length === 1) order = paid[0];
-    else if (matches.length === 1) order = matches[0];
+    const chosen = paid.length === 1 ? paid[0] : matches.length === 1 ? matches[0] : undefined;
+    if (chosen) {
+      order = chosen;
+      ticket = ticketsForOrder(chosen).find((item) => item.passCode === parsed.code);
+    }
   }
 
   let result: ScanResult = "invalid";
@@ -760,6 +871,27 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
     result = "rejected";
   } else if (order.status !== "paid") {
     result = "unpaid";
+  } else if (order.tickets && order.tickets.length > 0) {
+    const matched = ticket;
+    const live = matched
+      ? order.tickets.find(
+          (item) => item.id === matched.id || item.passCode === matched.passCode,
+        )
+      : undefined;
+    if (!live) {
+      result = "invalid";
+    } else if (live.enteredAt) {
+      result = "already-in";
+      order.entryCount = (order.entryCount ?? 1) + 1;
+    } else {
+      result = "admitted";
+      live.enteredAt = Date.now();
+      order.entryCount = (order.entryCount ?? 0) + 1;
+      if (order.tickets.every((item) => item.enteredAt)) {
+        order.enteredAt = live.enteredAt;
+      }
+      ticket = live;
+    }
   } else if (order.enteredAt) {
     result = "already-in";
     order.entryCount = (order.entryCount ?? 1) + 1;
@@ -773,7 +905,8 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
     id: randomBytes(8).toString("base64url"),
     orderId: order?.id,
     reference: order?.reference,
-    passCode: order?.passCode ?? parsed.code,
+    passCode: ticket?.passCode ?? order?.passCode ?? parsed.code,
+    ticketId: ticket?.id,
     name: order?.buyer.name,
     email: order?.buyer.email,
     result,
@@ -785,7 +918,7 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
   if (!Array.isArray(db.scans)) db.scans = [];
   db.scans.unshift(scan);
   persist();
-  return { result, order, scan };
+  return { result, order, ticket, scan };
 }
 
 /* -------------------- pass wallet / claim (cross-instance) -------------------- */
@@ -805,7 +938,25 @@ export type WalletPass = {
   phone: string;
   enteredAt?: number;
   exp?: number;
+  lines?: OrderLine[];
+  tickets?: Array<{
+    id: string;
+    passId: PassId;
+    passCode: string;
+    enteredAt?: number;
+  }>;
 };
+
+function restoreTickets(
+  orderId: string,
+  tickets?: WalletPass["tickets"],
+): PassTicket[] | undefined {
+  if (!tickets || tickets.length === 0) return undefined;
+  return tickets.map((ticket) => ({
+    ...ticket,
+    qrToken: signPurposeToken("pass-qr", `${orderId}:${ticket.passCode}`, PASS_QR_TTL_MS),
+  }));
+}
 
 export function toWalletPass(order: Order): WalletPass {
   return {
@@ -822,6 +973,13 @@ export function toWalletPass(order: Order): WalletPass {
     email: order.buyer.email,
     phone: order.buyer.phone,
     enteredAt: order.enteredAt,
+    lines: order.lines,
+    tickets: order.tickets?.map(({ id, passId, passCode, enteredAt }) => ({
+      id,
+      passId,
+      passCode,
+      enteredAt,
+    })),
   };
 }
 
@@ -855,7 +1013,10 @@ export function importWalletPass(pass: WalletPass): Order | null {
     db.orders[pass.id] ??
     getOrderByReference(pass.reference) ??
     Object.values(db.orders).find(
-      (order) => order.buyer.email === email && order.passCode && order.passCode === pass.passCode,
+      (order) =>
+        order.buyer.email === email &&
+        Boolean(pass.passCode) &&
+        orderMatchesCode(order, pass.passCode!),
     );
 
   if (existing) {
@@ -884,6 +1045,8 @@ export function importWalletPass(pass: WalletPass): Order | null {
     qrToken: pass.qrToken,
     paidAt: pass.status === "paid" ? Date.now() : undefined,
     enteredAt: pass.enteredAt,
+    lines: pass.lines,
+    tickets: restoreTickets(pass.id, pass.tickets),
   };
   if (order.status === "paid" && !order.passCode) mintPass(order);
   db.orders[order.id] = order;
@@ -910,7 +1073,7 @@ export function recoverPaidPass(input: {
   const matches = Object.values(db.orders).filter((order) => {
     if (order.status !== "paid") return false;
     if (order.buyer.email !== email) return false;
-    if (order.passCode !== passCode) return false;
+    if (!orderMatchesCode(order, passCode)) return false;
     if (order.buyer.phone.replace(/\D/g, "") !== phone) return false;
     if (ref && order.reference !== ref) return false;
     return true;
@@ -927,6 +1090,12 @@ export function toStaffOrder(order: Order) {
   delete rest.qrToken;
   return {
     ...rest,
+    tickets: order.tickets?.map(({ id, passId, passCode, enteredAt }) => ({
+      id,
+      passId,
+      passCode,
+      enteredAt,
+    })),
     hasPaymentProof: Boolean(order.paymentProofData),
   };
 }

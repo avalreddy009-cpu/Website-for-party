@@ -12,6 +12,14 @@ import { STATUS_LABEL } from "@/lib/order-stats";
 import { getPassById, type PassId } from "@/lib/passes";
 import type { OrderStatus } from "@/server/store";
 
+type AccountTicket = {
+  id: string;
+  passId: PassId;
+  passCode: string;
+  enteredAt?: number;
+  passQr?: string;
+};
+
 type AccountOrder = {
   reference: string;
   passId: PassId;
@@ -19,10 +27,12 @@ type AccountOrder = {
   total: number;
   status: OrderStatus;
   createdAt: number;
+  label?: string;
   passCode?: string;
   enteredAt?: number;
   utr?: string;
   passQr?: string;
+  tickets?: AccountTicket[];
 };
 
 const TONE: Record<string, string> = {
@@ -192,35 +202,55 @@ export default function AccountPage() {
                 </div>
                 <p className="mt-3 flex items-center gap-2 text-sm text-bone/70">
                   <Ticket className="size-3.5 text-bone/35" />
-                  {order.quantity} × {pass.name} · {formatPrice(order.total)}
+                  {order.label ?? `${order.quantity} × ${pass.name}`} · {formatPrice(order.total)}
                 </p>
-                {order.passCode && (
-                  <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
-                    {order.passQr && (
+                {(order.tickets && order.tickets.length > 0 ? order.tickets : order.passCode
+                  ? [
+                      {
+                        id: "legacy",
+                        passId: order.passId,
+                        passCode: order.passCode,
+                        passQr: order.passQr,
+                        enteredAt: order.enteredAt,
+                      },
+                    ]
+                  : []
+                ).map((ticket, index, list) => (
+                  <div
+                    key={ticket.id}
+                    className="mt-4 flex flex-col gap-4 border-t border-white/8 pt-4 sm:flex-row sm:items-center"
+                  >
+                    {ticket.passQr && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={order.passQr}
-                        alt="Pass QR"
+                        src={ticket.passQr}
+                        alt={`${getPassById(ticket.passId).name} QR`}
                         className="size-32 rounded-xl bg-white p-2"
                       />
                     )}
                     <div>
                       <p className="font-mono text-[8px] tracking-[0.22em] text-bone/35 uppercase">
-                        DOOR CODE
+                        {list.length > 1 ? `Pass ${index + 1} of ${list.length}` : "Door code"} ·{" "}
+                        {getPassById(ticket.passId).name}
                       </p>
                       <p className="mt-1 font-mono text-2xl tracking-[0.28em] text-bone">
-                        {order.passCode}
+                        {ticket.passCode}
                       </p>
+                      {ticket.enteredAt && (
+                        <p className="mt-2 font-mono text-[9px] tracking-[0.16em] text-bone/35 uppercase">
+                          Scanned in
+                        </p>
+                      )}
                     </div>
                   </div>
-                )}
+                ))}
                 {order.status === "reserved" && (
                   <p className="mt-2 text-xs text-bone/45">
                     Payment is with us. Once it&apos;s confirmed, the door code lands here and in
                     your email.
                   </p>
                 )}
-                {order.enteredAt && (
+                {order.enteredAt && (!order.tickets || order.tickets.every((ticket) => ticket.enteredAt)) && (
                   <p className="mt-2 font-mono text-[9px] tracking-[0.16em] text-bone/35 uppercase">
                     SCANNED IN
                   </p>

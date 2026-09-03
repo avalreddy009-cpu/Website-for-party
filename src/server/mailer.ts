@@ -1,9 +1,11 @@
 import nodemailer from "nodemailer";
 
+import { formatCartLabel, orderLines } from "@/lib/cart";
 import { EVENT, formatPrice } from "@/lib/event";
+import { getPassById } from "@/lib/passes";
 import { siteUrl } from "@/lib/site";
 import { passQrPayload, qrPngBuffer } from "./pass-code";
-import { signPassClaim, type Order } from "./store";
+import { signPassClaim, ticketsForOrder, type Order } from "./store";
 
 /**
  * Transports, first match wins:
@@ -228,23 +230,24 @@ export async function sendLoginCode(to: string, code: string): Promise<SendResul
 
 export async function sendOrderConfirmation(order: Order, passName: string): Promise<SendResult> {
   const firstName = escapeHtml(order.buyer.name.split(" ")[0] || "there");
-  const passNameSafe = escapeHtml(passName);
-  const row = (label: string, value: string) =>
+  const label = formatCartLabel(orderLines(order)) || passName;
+  const passNameSafe = escapeHtml(label);
+  const row = (key: string, value: string) =>
     `<tr>
-       <td style="padding:9px 0;font-size:11px;letter-spacing:.2em;color:#8c8fa8;text-transform:uppercase">${label}</td>
+       <td style="padding:9px 0;font-size:11px;letter-spacing:.2em;color:#8c8fa8;text-transform:uppercase">${key}</td>
        <td style="padding:9px 0;font-size:14px;color:#f4f4f8;text-align:right">${escapeHtml(value)}</td>
      </tr>`;
 
   const html = shell(
     "Pay on UPI, then we lock it in",
     `<p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#c9cadb">
-       ${firstName}, we're holding ${order.quantity} × ${passNameSafe}. Pay the total from the checkout QR
-       (same amount, same UPI ID). Once we see the credit, your pass lands in this inbox.
+       ${firstName}, we're holding ${passNameSafe}. Pay the total from the checkout QR
+       (same amount, same UPI ID). Once we see the credit, each pass lands in this inbox with its own QR.
      </p>
      <p style="margin:0 0 22px;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
                font-family:'Courier New',monospace;font-size:24px;letter-spacing:.2em;color:#ffffff">${order.reference}</p>
      <table role="presentation" width="100%" style="border-collapse:collapse">
-       ${row("Pass", passName)}
+       ${row("Pass", label)}
        ${row("Quantity", String(order.quantity))}
        ${row("Total", formatPrice(order.total))}
        ${row("Status", "Waiting for UPI · we'll confirm")}
@@ -253,49 +256,56 @@ export async function sendOrderConfirmation(order: Order, passName: string): Pro
        Put ${order.reference} in the UPI note if the app asks. Don't screenshot a random QR from Instagram — only the one in checkout.
      </p>`,
   );
-  const text = `${firstName}, ${order.quantity} x ${passName} reserved. Reference ${order.reference}. Total ${formatPrice(order.total)}. Pay via UPI from checkout — we email the pass after we confirm the credit.`;
+  const text = `${firstName}, ${label} reserved. Reference ${order.reference}. Total ${formatPrice(order.total)}. Pay via UPI from checkout — we email each pass QR after we confirm the credit.`;
   return send(order.buyer.email, `Pay UPI: ${order.reference} — UTOPIA`, html, text);
 }
 
 export async function sendPassApproved(order: Order, passName: string): Promise<SendResult> {
   const firstName = escapeHtml(order.buyer.name.split(" ")[0] || "there");
-  const passNameSafe = escapeHtml(passName);
+  const label = formatCartLabel(orderLines(order)) || passName;
+  const passNameSafe = escapeHtml(label);
   const nameSafe = escapeHtml(order.buyer.name);
-  const passCode = order.passCode ?? "------";
-  const payload = passQrPayload(order);
-  let qrAttached = false;
+  const tickets = ticketsForOrder(order);
   const attachments: Attachment[] = [];
-  try {
-    const png = await qrPngBuffer(payload);
-    attachments.push({
-      filename: `utopia-pass-${order.reference}.png`,
-      content: png,
-      contentType: "image/png",
-      cid: "utopia-pass-qr",
-    });
-    qrAttached = true;
-  } catch (error) {
-    console.error("[utopia] pass QR render failed", error);
+  const qrBlocks: string[] = [];
+
+  for (const [index, ticket] of tickets.entries()) {
+    const cid = `utopia-pass-qr-${index}`;
+    try {
+      const png = await qrPngBuffer(passQrPayload(order, ticket));
+      attachments.push({
+        filename: `utopia-pass-${order.reference}-${index + 1}.png`,
+        content: png,
+        contentType: "image/png",
+        cid,
+      });
+      const passLabel = getPassById(ticket.passId).name;
+      qrBlocks.push(
+        `<p style="margin:22px 0 6px;font-size:11px;letter-spacing:.24em;color:#8c8fa8;text-transform:uppercase;text-align:center">Pass ${index + 1} of ${tickets.length} · ${escapeHtml(passLabel)}</p>
+         <p style="margin:0 0 8px;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
+                   font-family:'Courier New',monospace;font-size:34px;letter-spacing:.34em;color:#ffffff">${ticket.passCode}</p>
+         <p style="margin:0 0 8px;text-align:center">
+           <img src="cid:${cid}" alt="UTOPIA pass QR ${index + 1}" width="220" height="220" style="width:220px;height:220px;border-radius:16px;background:#ffffff;padding:10px" />
+         </p>`,
+      );
+    } catch (error) {
+      console.error("[utopia] pass QR render failed", error);
+      qrBlocks.push(
+        `<p style="margin:22px 0 8px;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
+                   font-family:'Courier New',monospace;font-size:34px;letter-spacing:.34em;color:#ffffff">${ticket.passCode}</p>`,
+      );
+    }
   }
 
-  const qrBlock = qrAttached
-    ? `<p style="margin:22px 0 8px;text-align:center">
-         <img src="cid:utopia-pass-qr" alt="UTOPIA pass QR" width="220" height="220" style="width:220px;height:220px;border-radius:16px;background:#ffffff;padding:10px" />
-       </p>`
-    : "";
-
   const html = shell(
-    "Your pass is ready",
+    tickets.length > 1 ? "Your passes are ready" : "Your pass is ready",
     `<p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#c9cadb">
-       ${firstName}, payment checked. ${order.quantity} × ${passNameSafe} is yours.
-       Show the QR at the door — it carries your name and a code that only works for you.
+       ${firstName}, payment checked. ${passNameSafe} is yours.
+       ${tickets.length > 1 ? "Each person gets their own QR — don't share one code at the door." : "Show the QR at the door — it carries your name and a code that only works for you."}
      </p>
      <p style="margin:0 0 6px;font-size:11px;letter-spacing:.24em;color:#8c8fa8;text-transform:uppercase;text-align:center">Name on the pass</p>
      <p style="margin:0 0 18px;font-family:Georgia,'Times New Roman',serif;font-size:26px;color:#ffffff;text-align:center">${nameSafe}</p>
-     <p style="margin:0 0 8px;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
-               font-family:'Courier New',monospace;font-size:34px;letter-spacing:.34em;color:#ffffff">${passCode}</p>
-     <p style="margin:0 0 8px;font-size:12px;text-align:center;color:#8c8fa8">DOOR CODE · ${passCode} · REF ${order.reference}</p>
-     ${qrBlock}
+     ${qrBlocks.join("")}
      <p style="margin:18px 0 0;text-align:center">
        <a href="${siteUrl()}/account?claim=${encodeURIComponent(signPassClaim(order))}"
           style="display:inline-block;padding:12px 22px;background:#9aa4ff;color:#030307;border-radius:999px;font-size:12px;letter-spacing:.16em;text-decoration:none;font-weight:700">
@@ -303,11 +313,16 @@ export async function sendPassApproved(order: Order, passName: string): Promise<
        </a>
      </p>
      <p style="margin:12px 0 0;font-size:12px;line-height:1.7;color:#8c8fa8;text-align:center">
-       Screenshot this. The QR is also attached as a PNG if the picture above doesn't load.
+       Screenshot these. Each QR is also attached as a PNG if a picture above doesn't load.
      </p>`,
   );
-  const text = `${firstName}, you're confirmed. ${order.quantity} x ${passName}. Name: ${order.buyer.name}. Door code: ${passCode}. Reference ${order.reference}. Open your pass: ${siteUrl()}/account?claim=${signPassClaim(order)}`;
-  return send(order.buyer.email, `Your UTOPIA pass — ${passCode}`, html, text, attachments);
+  const codes = tickets.map((ticket) => ticket.passCode).join(", ");
+  const text = `${firstName}, you're confirmed. ${label}. Name: ${order.buyer.name}. Door codes: ${codes || order.passCode}. Reference ${order.reference}. Open your passes: ${siteUrl()}/account?claim=${signPassClaim(order)}`;
+  const subject =
+    tickets.length > 1
+      ? `Your UTOPIA passes — ${order.reference}`
+      : `Your UTOPIA pass — ${tickets[0]?.passCode ?? order.passCode ?? order.reference}`;
+  return send(order.buyer.email, subject, html, text, attachments);
 }
 
 /** Old owner: pass moved. No new codes — those only go to the new inbox. */

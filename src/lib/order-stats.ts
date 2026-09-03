@@ -1,4 +1,5 @@
 import { PASSES, type PassId } from "./passes";
+import { orderLines } from "./cart";
 import type { Order, OrderStatus } from "@/server/store";
 
 export type OrderStats = {
@@ -30,8 +31,13 @@ export function summarizeOrders(orders: Order[]): OrderStats {
     if (order.status === "paid") {
       stats.paid += 1;
       stats.revenue += order.total;
-      byPass[order.passId].sold += order.quantity;
-      byPass[order.passId].revenue += order.total;
+      const lines = orderLines(order);
+      const lineTotal = lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0);
+      for (const line of lines) {
+        const slice = line.unitPrice * line.quantity;
+        byPass[line.passId].sold += line.quantity;
+        byPass[line.passId].revenue += lineTotal > 0 ? slice : 0;
+      }
     }
     if (order.status === "rejected") stats.rejected += 1;
   }

@@ -25,10 +25,13 @@ export function derivePassDigits(email: string, phone: string, orderId?: string)
 }
 
 /** What the QR actually encodes: a signed token the door panel can verify. */
-export function passQrPayload(order: Order): string {
-  const token = order.qrToken ?? "";
+export function passQrPayload(
+  order: Order,
+  ticket?: { passCode?: string; qrToken?: string },
+): string {
+  const token = ticket?.qrToken ?? order.qrToken ?? "";
   const name = order.buyer.name.replace(/\|/g, " ").slice(0, 60);
-  const code = order.passCode ?? "";
+  const code = ticket?.passCode ?? order.passCode ?? "";
   return `UTP|${name}|${code}|${token}`;
 }
 

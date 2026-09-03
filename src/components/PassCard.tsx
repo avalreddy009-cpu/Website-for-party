@@ -209,7 +209,7 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
                 </button>
               </div>
               <p className="mt-3.5 text-center font-mono text-[8px] tracking-[0.2em] text-bone/25 uppercase">
-                {pass.notIncluded}
+                Mix Early Bird + VIP in checkout · {pass.notIncluded}
               </p>
             </div>
           </div>

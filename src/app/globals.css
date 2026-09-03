@@ -248,6 +248,10 @@
   transform-style: preserve-3d;
 }
 
+.terms-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #7d8bff, #ff3b9a);
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

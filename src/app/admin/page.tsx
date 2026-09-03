@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 
+import { formatCartLabel, orderLines } from "@/lib/cart";
 import { formatPrice } from "@/lib/event";
 import { STATUS_LABEL, type OrderStats } from "@/lib/order-stats";
 import { getPassById } from "@/lib/passes";
@@ -417,6 +418,13 @@ function OrderRow({
   onViewProof,
 }: OrderRowProps) {
   const pass = getPassById(order.passId);
+  const label = formatCartLabel(orderLines(order));
+  const codes = [
+    ...(order.tickets?.map((ticket) => ticket.passCode) ?? []),
+    ...(order.passCode && !order.tickets?.length ? [order.passCode] : []),
+  ];
+  const anyEntered =
+    Boolean(order.enteredAt) || Boolean(order.tickets?.some((ticket) => ticket.enteredAt));
   const tone = STATUS_TONE[order.status];
   const isPending = order.status === "reserved";
   const holdExpired =
@@ -457,7 +465,7 @@ function OrderRow({
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-bone/70">
             <span className="flex items-center gap-1.5">
               <Ticket className="size-3.5 text-bone/35" />
-              {order.quantity} × {pass.name}
+              {label || `${order.quantity} × ${pass.name}`}
             </span>
             <span className="flex items-center gap-1.5">
               <User className="size-3.5 text-bone/35" />
@@ -485,8 +493,8 @@ function OrderRow({
             {order.status === "paid" && order.decidedBy && (
               <span>APPROVED BY {order.decidedBy}</span>
             )}
-            {order.status === "paid" && order.passCode && (
-              <span>PASS {order.passCode}</span>
+            {order.status === "paid" && codes.length > 0 && (
+              <span>PASS {codes.join(" · ")}</span>
             )}
             {order.transferredAt && (
               <span>
@@ -520,7 +528,7 @@ function OrderRow({
             {formatPrice(order.total)}
           </p>
 
-          {order.status === "paid" && !order.enteredAt && !transferring && (
+          {order.status === "paid" && !anyEntered && !transferring && (
             <button
               type="button"
               onClick={onStartTransfer}

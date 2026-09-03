@@ -59,6 +59,7 @@ type ScanResponse = {
     passId: "early" | "vip";
     enteredAt?: number;
     status: string;
+    unused?: number;
   } | null;
   scan: ScanLog;
   error?: string;
@@ -396,7 +397,13 @@ export default function DoorPage() {
                             {latest.pass.passCode} · {latest.pass.reference}
                           </p>
                           <p className="mt-1 text-xs text-bone/50">
-                            {latest.pass.quantity} × {getPassById(latest.pass.passId).name}
+                            This QR: {getPassById(latest.pass.passId).name}
+                            {latest.pass.quantity > 1
+                              ? ` · order has ${latest.pass.quantity} passes`
+                              : ""}
+                            {typeof latest.pass.unused === "number"
+                              ? ` · ${latest.pass.unused} still unused`
+                              : ""}
                           </p>
                         </>
                       ) : (
@@ -406,7 +413,11 @@ export default function DoorPage() {
                         </p>
                       )}
                       <p className="mt-3 text-xs text-bone/55">
-                        {RESULT_COPY[latest.result].detail}
+                        {latest.result === "already-in" &&
+                        latest.pass &&
+                        (latest.pass.unused ?? 0) > 0
+                          ? "This QR already went in. Other passes on the same order still work."
+                          : RESULT_COPY[latest.result].detail}
                       </p>
                     </motion.div>
                   )}

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { cartFromUnknown, formatCartLabel } from "@/lib/cart";
 import { EVENT } from "@/lib/event";
 import { getPassById } from "@/lib/passes";
-import { priceOrder } from "@/lib/pricing";
+import { priceCart } from "@/lib/pricing";
 import { fieldErrors, reserveSchema } from "@/lib/validation";
 import { sendOrderConfirmation } from "@/server/mailer";
 import { qrDataUrl } from "@/server/pass-code";
@@ -50,7 +51,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { name, email, phone, passId, quantity, verificationToken } = parsed.data;
+  const { name, email, phone, verificationToken } = parsed.data;
+  const cart = cartFromUnknown(parsed.data);
 
   if (!canReserveWithToken(verificationToken, email)) {
     return NextResponse.json(
@@ -59,8 +61,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const pass = getPassById(passId);
-  const totals = priceOrder(passId, quantity, getPassPrice(passId));
+  const prices = { early: getPassPrice("early"), vip: getPassPrice("vip") };
+  const totals = priceCart(cart, prices);
+  const pass = getPassById(totals.passId);
   const upi = getUpiConfig();
 
   if (!upi.configured) {
@@ -72,13 +75,14 @@ export async function POST(request: Request) {
 
   const order = createOrder(
     {
-      passId,
-      quantity,
+      passId: totals.passId,
+      quantity: totals.quantity,
       unitPrice: totals.unitPrice,
       subtotal: totals.subtotal,
       fee: totals.fee,
       total: totals.total,
       buyer: { name, email, phone },
+      lines: totals.lines,
     },
     EVENT.holdMinutes,
   );
@@ -94,7 +98,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await sendOrderConfirmation(order, pass.name);
+    await sendOrderConfirmation(order, formatCartLabel(totals.lines) || pass.name);
   } catch (error) {
     console.error("[utopia] confirmation email failed", error);
   }

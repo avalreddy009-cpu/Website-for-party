@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { result, order, scan } = scanPass(parsed.data.payload, session.username);
+  const { result, order, ticket, scan } = scanPass(parsed.data.payload, session.username);
 
   if (result === "admitted" && order) {
     try {
@@ -53,12 +53,15 @@ export async function POST(request: Request) {
     pass: order
       ? {
           name: order.buyer.name,
-          passCode: order.passCode,
+          passCode: ticket?.passCode ?? order.passCode,
           reference: order.reference,
           quantity: order.quantity,
-          passId: order.passId,
-          enteredAt: order.enteredAt,
+          passId: ticket?.passId ?? order.passId,
+          enteredAt: ticket?.enteredAt ?? order.enteredAt,
           status: order.status,
+          unused:
+            order.tickets?.filter((item) => !item.enteredAt).length ??
+            (order.enteredAt ? 0 : 1),
         }
       : null,
   });
