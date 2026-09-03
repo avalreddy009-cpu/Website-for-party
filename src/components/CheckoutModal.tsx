@@ -815,7 +815,7 @@ function StepPass({
 
       <div className="flex items-center justify-between rounded-2xl border border-white/9 bg-white/2 px-5 py-4">
         <p className="font-mono text-[8px] tracking-[0.22em] text-bone/35 uppercase">
-          {cartCount(cart)} {cartCount(cart) === 1 ? "pass" : "passes"} · each QR is unique
+          {cartCount(cart)} {cartCount(cart) === 1 ? "pass" : "passes"}
         </p>
         <p className="font-display text-xl font-light text-bone tabular-nums sm:text-2xl">
           {formatPrice(subtotal)}
