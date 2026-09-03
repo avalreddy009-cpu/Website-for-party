@@ -2,24 +2,18 @@
 
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Ban, Martini, Wallet } from "lucide-react";
+import { Ban, Wallet } from "lucide-react";
 
 import { EVENT } from "@/lib/event";
 import { Reveal, SectionLabel } from "./ui/Reveal";
 
 const RULES = [
   {
-    icon: Martini,
-    title: "No alcohol. At all.",
-    short: "Not a sip, not a sneaky one, not \u201cjust for the photo\u201d.",
-    long: "The bar pours mocktails and only mocktails. If you turn up already smelling like a bar, you're not coming in — and yes, we can tell from three feet away.",
-    tone: "signal" as const,
-  },
-  {
     icon: Ban,
-    title: "We check bags. Properly.",
-    short: "Bring a flask and it becomes our flask.",
-    long: "Anything found gets confiscated and you go home, in front of everyone, at 2 in the afternoon. Sober people dance better anyway. Don't make it weird.",
+    title: "No.",
+    short:
+      "UTOPIA has a zero-substance policy: no alcohol, no vaping, and no drugs. Pocket and bag checks are performed at entry.",
+    long: "Any guest found in violation is removed immediately. The pass is revoked without refund.",
     tone: "signal" as const,
   },
   {
@@ -47,17 +41,17 @@ export function HouseRules() {
           </Reveal>
           <Reveal delay={0.08}>
             <h2 className="font-display mt-8 text-4xl leading-[1.05] font-light text-bone sm:text-5xl">
-              Three rules.
+              Two rules.
               <span className="block text-bone/45 italic">
-                Two of them are the same rule.
+                The first one is the party.
               </span>
             </h2>
           </Reveal>
           <Reveal delay={0.16}>
             <p className="mt-6 max-w-sm text-sm leading-relaxed text-bone/55">
-              {EVENT.policyShort} Everything else is negotiable — the outfit, the
-              dancing, whether you know the words. Tap a rule to read the fine
-              print.
+              {EVENT.policyShort} Pocket and bag checks at the door. Everything
+              else is negotiable — the outfit, the dancing, whether you know the
+              words.
             </p>
           </Reveal>
         </div>

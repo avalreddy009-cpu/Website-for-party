@@ -8,7 +8,7 @@ export type TermsSection = {
 export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: "Zero Tolerance Policy",
-    body: "Strictly zero alcohol or drugs. Any guest found in violation will be immediately removed.",
+    body: "UTOPIA has a zero-substance policy: no alcohol, no vaping, and no drugs. Pocket and bag checks are performed at entry. Any guest found in violation will be immediately removed.",
   },
   {
     title: "Teen-Only Entry",
@@ -40,7 +40,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   },
   {
     title: "Bag Search",
-    body: "Bags are checked at entry. Alcohol, drugs, glass, or anything that breaks house rules is confiscated and you go home.",
+    body: "Pocket and bag checks are performed at entry. Alcohol, vapes, drugs, or anything that breaks house rules is confiscated and you do not come in.",
   },
   {
     title: "Food & Mocktails",

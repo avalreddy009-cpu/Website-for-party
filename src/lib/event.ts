@@ -21,9 +21,10 @@ export const EVENT = {
   mapsUrl: "https://maps.app.goo.gl/2RwwfkFsRRg3G3rJ6",
 
   // This is a dry day party. It is the whole point, so we say it everywhere.
-  policyShort: "Zero alcohol. Not one drop.",
+  policyShort:
+    "UTOPIA has a zero-substance policy: no alcohol, no vaping, and no drugs.",
   policyLong:
-    "This is a day party built for people who usually get turned away at the door. Nobody is checking whether you're old enough to drink, because nobody is drinking.",
+    "UTOPIA has a zero-substance policy: no alcohol, no vaping, and no drugs. Pocket and bag checks are performed at entry.",
 
   email: "passes@avionproductions.in",
   instagram: "https://www.instagram.com/avion.prod._/",
