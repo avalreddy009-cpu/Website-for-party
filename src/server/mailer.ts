@@ -185,7 +185,7 @@ const shell = (heading: string, body: string) => `
         <a href="${EVENT.mapsUrl}" style="color:#9aa4ff">Open in Google Maps</a>
       </p>
       <p style="margin:18px 0 0;font-size:11px;color:#63667e">
-        ${EVENT.policyShort} Bags get checked at the door.
+        ${EVENT.policyLong}
       </p>
     </td></tr>
   </table>
