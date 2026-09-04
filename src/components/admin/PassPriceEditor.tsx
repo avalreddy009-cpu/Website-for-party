@@ -6,13 +6,12 @@ import { IndianRupee, Loader2 } from "lucide-react";
 import { formatPrice } from "@/lib/event";
 import { DEFAULT_PASS_PRICES, PASSES, type PassId } from "@/lib/passes";
 
+/** The subset of /api/admin/prices' UPI payload this card renders. */
 type UpiPreview = {
   amount: number;
   upiQr?: string;
-  upiUri?: string | null;
   configured?: boolean;
   vpa?: string;
-  payeeName?: string;
 };
 
 type PricesResponse = {
