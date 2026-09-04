@@ -739,7 +739,7 @@ function StepPass({
         <StepTitle
           eyebrow="STEP 01"
           title="Build the bag"
-          hint={`Early Bird, VIP, or both — one payment. Up to ${MAX_QUANTITY} passes.`}
+          hint={`Standard, VIP, or both — one payment. Up to ${MAX_QUANTITY} passes.`}
         />
         <div className="mt-5 grid gap-2.5">
           {catalog.map((option) => {

@@ -37,7 +37,7 @@ export function PassTiers({ onBuy }: PassTiersProps) {
 
         <Reveal delay={0.18} className="max-w-sm">
           <p className="text-sm leading-relaxed text-bone/55">
-            Early Bird is the cheapest this gets — the price goes up when it
+            Standard is the cheapest this gets — the price goes up when it
             sells out, not when we feel like it. Flip a card to see exactly
             what&apos;s included before you pay anything.
           </p>
