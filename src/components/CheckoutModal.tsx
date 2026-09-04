@@ -374,10 +374,16 @@ function CheckoutFlow({
       setErrors({ form: result.error });
       return;
     }
-    setReservation(result.data);
+    // The server reprices from the CMS, so the hold can come back worth more
+    // than the total they just agreed to. Say so rather than quietly swapping
+    // the number on the next screen.
+    setReservation({
+      ...result.data,
+      amountChanged: result.data.total !== totals.total,
+    });
     setDirection(1);
     setStep(4);
-  }, [agreed, form, goTo, cart, reservation, setBusyState, token]);
+  }, [agreed, form, goTo, cart, reservation, setBusyState, token, totals.total]);
 
   const submitPay = useCallback(async () => {
     if (!token || !reservation) {
