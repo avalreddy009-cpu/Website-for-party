@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>UTOPIA — defect report</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 16mm 16mm; }
+
+  :root {
+    --ink: #14161c;
+    --muted: #5c6270;
+    --rule: #d8dbe2;
+    --accent: #2b3ba8;
+    --sev-high: #a4123c;
+    --sev-med: #9a5b06;
+    --sev-low: #4a5160;
+    --code-bg: #f4f5f8;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body {
+    margin: 0;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 9.6pt;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+
+  code, .mono {
+    font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 8.6pt;
+    background: var(--code-bg);
+    padding: 0.5pt 2.5pt;
+    border-radius: 2pt;
+  }
+
+  /* ---------- cover ---------- */
+  .cover { border-bottom: 2pt solid var(--ink); padding-bottom: 10pt; margin-bottom: 16pt; }
+  .eyebrow {
+    font-size: 7.6pt; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 6pt;
+  }
+  h1 { font-size: 20pt; line-height: 1.15; margin: 0 0 8pt; letter-spacing: -0.01em; }
+  .standfirst { font-size: 10.4pt; color: var(--muted); margin: 0; max-width: 46em; }
+
+  .meta { margin-top: 12pt; display: grid; grid-template-columns: repeat(2, 1fr); gap: 3pt 24pt; }
+  .meta div { font-size: 8.4pt; color: var(--muted); }
+  .meta b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- headings ---------- */
+  h2 {
+    font-size: 12pt; margin: 20pt 0 8pt; padding-bottom: 3pt;
+    border-bottom: 0.75pt solid var(--rule); letter-spacing: -0.005em;
+  }
+  h2:first-of-type { margin-top: 14pt; }
+
+  h3 { font-size: 10.2pt; margin: 14pt 0 4pt; }
+  h3 .num { color: var(--muted); font-weight: 400; margin-right: 5pt; }
+
+  p { margin: 0 0 7pt; }
+  ul { margin: 0 0 7pt; padding-left: 15pt; }
+  li { margin-bottom: 3pt; }
+
+  /* ---------- severity ---------- */
+  .sev {
+    display: inline-block; font-size: 6.8pt; letter-spacing: 0.1em;
+    text-transform: uppercase; font-weight: 700; padding: 1.5pt 4.5pt;
+    border-radius: 2pt; vertical-align: 1.5pt; margin-left: 6pt; color: #fff;
+  }
+  .sev.high { background: var(--sev-high); }
+  .sev.med  { background: var(--sev-med); }
+  .sev.low  { background: var(--sev-low); }
+
+  /* ---------- finding blocks ---------- */
+  .finding { break-inside: avoid; margin-bottom: 4pt; }
+  .row { display: grid; grid-template-columns: 74pt 1fr; gap: 3pt 8pt; margin-top: 5pt; }
+  .row dt {
+    font-size: 7.4pt; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; padding-top: 1.5pt;
+  }
+  .row dd { margin: 0; }
+
+  /* ---------- table ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt; font-size: 8.6pt; }
+  th, td { text-align: left; padding: 4pt 6pt 4pt 0; border-bottom: 0.5pt solid var(--rule); vertical-align: top; }
+  th {
+    font-size: 7.2pt; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--muted); border-bottom: 0.75pt solid var(--ink);
+  }
+  td.sv { white-space: nowrap; width: 46pt; }
+  td.sv span { font-size: 6.8pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .s-high { color: var(--sev-high); }
+  .s-med  { color: var(--sev-med); }
+  .s-low  { color: var(--sev-low); }
+
+  /* ---------- callout ---------- */
+  .callout {
+    border-left: 2.5pt solid var(--accent); background: #f6f7fc;
+    padding: 8pt 10pt; margin: 10pt 0; break-inside: avoid;
+  }
+  .callout.warn { border-left-color: var(--sev-high); background: #fdf5f7; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .label {
+    font-size: 7.2pt; letter-spacing: 0.11em; text-transform: uppercase;
+    font-weight: 700; color: var(--accent); margin: 0 0 4pt;
+  }
+  .callout.warn .label { color: var(--sev-high); }
+
+  pre {
+    background: var(--code-bg); border-left: 2pt solid var(--rule);
+    padding: 6pt 8pt; margin: 6pt 0; font-size: 8pt; line-height: 1.45;
+    overflow-wrap: break-word; white-space: pre-wrap; break-inside: avoid;
+    font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .page-break { break-before: page; }
+
+  footer {
+    margin-top: 22pt; padding-top: 7pt; border-top: 0.75pt solid var(--rule);
+    font-size: 7.8pt; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <p class="eyebrow">UTOPIA &middot; AVION Productions &middot; defect report</p>
+  <h1>Door scanning, UPI pricing, and seven logic defects</h1>
+  <p class="standfirst">
+    Two reported faults &mdash; passes not scanning at the door, and the UPI QR
+    keeping its old amount after a price edit &mdash; plus the defects found
+    while tracing them. Every item below is fixed, on <code>main</code>, and
+    deployed.
+  </p>
+  <div class="meta">
+    <div><b>Repository</b> &nbsp;avalreddy009-cpu/Website-for-party</div>
+    <div><b>Deployment</b> &nbsp;avionproductions.vercel.app</div>
+    <div><b>Commits</b> &nbsp;<span class="mono">5437891</span> &hellip; <span class="mono">862bb1a</span> (8)</div>
+    <div><b>Date</b> &nbsp;4 September 2026</div>
+    <div><b>Stack</b> &nbsp;Next.js 16 App Router, React 19, Upstash Redis</div>
+    <div><b>Status</b> &nbsp;Merged to <code>main</code>, CI and deploy green</div>
+  </div>
+</div>
+
+<h2>Summary</h2>
+
+<table>
+  <thead>
+    <tr><th>Severity</th><th>Defect</th><th>What it cost</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="sv"><span class="s-high">High</span></td><td>Pass QRs would not scan at the door</td><td>Staff fall back to typing codes; queue stalls</td></tr>
+    <tr><td class="sv"><span class="s-high">High</span></td><td>A concurrent write could un-scan a guest</td><td>Same QR admitted twice</td></tr>
+    <tr><td class="sv"><span class="s-high">High</span></td><td>Rate limits keyed off a caller-supplied header</td><td>Every limit on the site bypassable</td></tr>
+    <tr><td class="sv"><span class="s-high">High</span></td><td>A URL segment used as an object key</td><td>Prototype pollution from the CMS</td></tr>
+    <tr><td class="sv"><span class="s-med">Medium</span></td><td>UPI QR kept the old amount after a price edit</td><td>Buyers pay the wrong total</td></tr>
+    <tr><td class="sv"><span class="s-med">Medium</span></td><td>Verification codes locked addresses out for good</td><td>Real buyers cannot check out</td></tr>
+    <tr><td class="sv"><span class="s-med">Medium</span></td><td>Abandoned holds never expired</td><td>Pending list never clears; dead rows repriced</td></tr>
+    <tr><td class="sv"><span class="s-med">Medium</span></td><td>Reference lookup dead for group bookings</td><td>Valid group reads as a forgery at the door</td></tr>
+    <tr><td class="sv"><span class="s-low">Low</span></td><td>Per-tier revenue inflated on re-imported orders</td><td>Wrong numbers in the CMS</td></tr>
+    <tr><td class="sv"><span class="s-low">Low</span></td><td>Order list could 500 on a retired pass tier</td><td>CMS page fails to load</td></tr>
+    <tr><td class="sv"><span class="s-low">Low</span></td><td>Signed-token fields had no upper length bound</td><td>Wasted work before rejection</td></tr>
+    <tr><td class="sv"><span class="s-low">Low</span></td><td>Pass wallet cookie could exceed the browser cap</td><td>Silently dropped; looks like a sign-out</td></tr>
+  </tbody>
+</table>
+
+<h2>The two reported faults</h2>
+
+<div class="finding">
+  <h3><span class="num">01</span>Pass QRs would not scan at the door<span class="sev high">High</span></h3>
+  <dl class="row">
+    <dt>Cause</dt>
+    <dd>
+      Three independent problems stacked. The decoder ran jsQR with
+      <code>inversionAttempts: "dontInvert"</code>, which discards light-on-dark
+      codes &mdash; the usual result when reading off a phone screen. The payload
+      was <code>UTP|{name}|{code}|{token}</code> with a full HMAC token, dense
+      enough that the module size at arm's length fell below what a camera frame
+      resolves. And a decode that produced something unrecognisable was
+      discarded without any feedback, so the panel looked inert.
+    </dd>
+    <dt>Fix</dt>
+    <dd>
+      New QRs carry a short <code>orderId.passCode.signature</code> token at
+      error-correction level H. The decoder tries the platform's native
+      <code>BarcodeDetector</code> first, then jsQR with inversion attempts on
+      both the full frame and a centre crop. Failed camera reads now surface a
+      red result card. QRs already emailed still verify &mdash; the old token
+      format is parsed alongside the new one.
+    </dd>
+    <dt>Verify</dt>
+    <dd>53-character payload round-trips through jsQR; door scans exercised in <code>scripts/e2e-check.sh</code>.</dd>
+  </dl>
+</div>
+
+<div class="finding">
+  <h3><span class="num">02</span>UPI QR kept the old amount after a price edit<span class="sev med">Medium</span></h3>
+  <dl class="row">
+    <dt>Cause</dt>
+    <dd>
+      The QR was built once, at reservation time, and the amount was frozen into
+      it. Editing a price in the CMS changed nothing already issued. The public
+      catalogue also fetched prices once on mount and never again, so an open
+      landing page kept showing the old figure until reloaded.
+    </dd>
+    <dt>Fix</dt>
+    <dd>
+      Saving a price rebuilds the UPI QR for every unpaid hold. An open pay
+      screen polls and picks up the new amount, and tells the buyer it changed
+      rather than swapping the number silently. The price editor renders the live
+      one-pass QR at the saved amount, greyed out until what you have typed is
+      actually saved. The catalogue refetches on focus and on a slow timer.
+    </dd>
+    <dt>Boundary</dt>
+    <dd>
+      A hold with a UTR already submitted is never repriced. What they paid is
+      what they paid.
+    </dd>
+  </dl>
+</div>
+
+<h2 class="page-break">Defects found while tracing those</h2>
+
+<div class="finding">
+  <h3><span class="num">03</span>A concurrent write could un-scan a guest<span class="sev high">High</span></h3>
+  <dl class="row">
+    <dt>Cause</dt>
+    <dd>
+      The store persists to Redis by writing the entire database as one blob, and
+      every request hydrates by merging the remote copy back in. The merge
+      replaced an order wholesale whenever the remote copy's status ranked equal
+      or higher. Two copies both marked <code>paid</code> tie, so an instance that
+      read before a door scan and wrote after it handed back a copy with no entry
+      recorded &mdash; and the same QR was admitted a second time.
+    </dd>
+    <dt>Fix</dt>
+    <dd>
+      Door entries, revoked pass codes and payment proof are treated as one-way
+      latches during a merge, in either direction. A lost write now costs a stale
+      name or price, not a guest walking in twice.
+    </dd>
+    <dt>Verify</dt>
+    <dd>
+      <code>scripts/concurrency-check.sh</code> admits a pass, replays a pre-scan
+      snapshot over the top, and scans again. On the old code it reported
+      <code>admitted</code>; it now reports <code>already-in</code>.
+    </dd>
+  </dl>
+</div>
+
+<div class="finding">
+  <h3><span class="num">04</span>Rate limits keyed off a caller-supplied header<span class="sev high">High</span></h3>
+  <dl class="row">
+    <dt>Cause</dt>
+    <dd>
+      The limiter identified callers by the leftmost <code>X-Forwarded-For</code>
+      entry. Anyone can set that header, so changing it per request produced a
+      fresh counter each time and every limit on the site &mdash; staff login,
+      one-time codes, reservations &mdash; became decorative.
+    </dd>
+    <dt>Fix</dt>
+    <dd>
+      Prefer the headers the platform writes itself and otherwise take the last
+      hop, the one the nearest trusted proxy appended. The counter map is also
+      bounded now; it previously grew one entry per address per scope for the life
+      of the process.
+    </dd>
+  </dl>
+</div>
+
+<div class="finding">
+  <h3><span class="num">05</span>A URL segment used as an object key<span class="sev high">High</span></h3>
+  <dl class="row">
+    <dt>Cause</dt>
+    <dd>
+      Orders live in a plain object keyed by id, and the approve and reject routes
+      looked up the raw path segment. <code>POST /api/admin/orders/__proto__/approve</code>
+      therefore resolved <code>Object.prototype</code>: truthy, so it passed the
+      already-decided guard, after which <code>status</code> and <code>paidAt</code>
+      were written onto the prototype that every object in the process inherits.
+    </dd>
+    <dt>Fix</dt>
+    <dd>
+      Every order lookup goes through one accessor that checks own keys. Both
+      routes validate the id the way the transfer route already did, and the Redis
+      merge skips those keys too &mdash; assigning one there reparents the object
+      rather than adding to it.
+    </dd>
+    <dt>Verify</dt>
+    <dd>Covered in <code>scripts/e2e-check.sh</code>, which asserts the prototype stays clean.</dd>
+  </dl>
+</div>
+
+<div class="finding">
+  <h3><span class="num">06</span>Verification codes locked addresses out permanently<span class="sev med">Medium</span></h3>
+  <dl class="row">
+    <dt>Cause</dt>
+    <dd>
+      The send counter was compared against a per-window cap but only ever
+      incremented &mdash; it never reset when the window lapsed. The fifth code an
+      address requested was effectively its last: every later request tripped the
+      cap for as long as they kept trying.
+    </dd>
+    <dt>Fix</dt>
+    <dd>
+      The counter resets with the window it belongs to, and the retry-after the
+      API reports is the real one rather than a fixed fifteen minutes.
+    </dd>
+  </dl>
+</div>
+
+<div class="finding">
+  <h3><span class="num">07</span>Abandoned holds never expired<span class="sev med">Medium</span></h3>
+  <dl class="row">
+    <dt>Cause</dt>
+    <dd>
+      <code>OrderStatus</code> has carried <code>"expired"</code> since the first
+      commit and the CMS draws its badge from the hold deadline, but nothing ever
+      set the status. A month-old abandoned hold stayed <code>reserved</code>:
+      counted as pending, still accepting proof, and repriced on every price
+      change. The badge and the backend disagreed.
+    </dd>
+    <dt>Fix</dt>
+    <dd>
+      Stale unpaid holds are swept on hydrate. Submitting proof un-expires the
+      hold rather than refusing it &mdash; someone who has already transferred
+      money outranks a thirty-minute timer, and staff should see the row instead
+      of receiving an email about it.
+    </dd>
+    <dt>Verify</dt>
+    <dd><code>scripts/hold-expiry-check.sh</code> covers the sweep, the revival, and that a revived hold survives the next sweep.</dd>
+  </dl>
+</div>
+
+<div class="finding">
+  <h3><span class="num">08</span>Reference lookup dead for group bookings<span class="sev med">Medium</span></h3>
+  <dl class="row">
+    <dt>Cause</dt>
+    <dd>
+      Typing a booking reference at the door only resolved orders holding a single
+      pass. For anything larger the lookup fell through silently and the panel
+      reported <span class="mono">NOT A PASS</span> &mdash; which reads like a
+      forgery for a perfectly valid group.
+    </dd>
+    <dt>Fix</dt>
+    <dd>
+      A reference admits the next unused pass on that order, so staff can walk a
+      group through one at a time. Once all are used it reports
+      <code>already-in</code> rather than invalid.
+    </dd>
+  </dl>
+</div>
+
+<div class="finding">
+  <h3><span class="num">09</span>Three smaller defects<span class="sev low">Low</span></h3>
+  <ul>
+    <li>
+      Re-imported orders stored the order total in the per-pass price field, so
+      the CMS reported a group booking's per-tier revenue as total multiplied by
+      quantity.
+    </li>
+    <li>
+      The order summary indexed a revenue bucket by pass id without checking it
+      existed, so a single row carrying a retired tier would throw and take the
+      whole CMS order list down with a 500.
+    </li>
+    <li>
+      The pass wallet cookie was not size-checked. Browsers drop a cookie over
+      roughly 4&nbsp;KB without reporting it, which presents identically to being
+      signed out. It is now trimmed to fit, oldest passes first.
+    </li>
+  </ul>
+</div>
+
+<div class="finding">
+  <h3><span class="num">10</span>Signed-token fields had no upper bound<span class="sev low">Low</span></h3>
+  <dl class="row">
+    <dt>Cause</dt>
+    <dd>
+      Token schemas set a minimum length but no maximum, so a megabyte of junk was
+      base64-decoded and HMAC-verified before being rejected. The pass-claim route
+      coerced its token with a bare <code>String()</code> and no check at all.
+    </dd>
+    <dt>Fix</dt>
+    <dd>Both are bounded to what the server actually mints and rejected before any cryptographic work.</dd>
+  </dl>
+</div>
+
+<h2 class="page-break">Reported but deliberately unchanged</h2>
+
+<p>
+  Two independent audits flagged the following as defects. On inspection both are
+  intended behaviour, and changing either would have made the product worse.
+</p>
+
+<div class="finding">
+  <h3>One address can book again after re-verifying</h3>
+  <p>
+    The rule is one reservation per verification token, not one per email address.
+    Requesting a fresh code issues a fresh token, which is the intended way to
+    place a second order &mdash; and with a cap of eight passes per order, anyone
+    buying more than that legitimately needs one. The harm the audits actually
+    described, unpaid holds accumulating in the pending list, is what the hold
+    expiry sweep in item 07 addresses.
+  </p>
+</div>
+
+<div class="finding">
+  <h3>The wrong-guess counter resets when a new code is sent</h3>
+  <p>
+    A new code is a different secret, so carrying the failed-attempt count across
+    would only penalise people who mistyped. Total guesses stay bounded by the cap
+    on codes per window regardless.
+  </p>
+</div>
+
+<div class="finding">
+  <h3>Rate limiting is per-process</h3>
+  <p>
+    Counters live in process memory, so on a multi-instance deployment the
+    effective budget scales with the number of running instances. This is real but
+    needs shared storage rather than a patch, and the code already documents it.
+    It is noted here as known, not fixed.
+  </p>
+</div>
+
+<h2>Operational note</h2>
+
+<div class="callout warn">
+  <p class="label">Do not remove these environment variables</p>
+  <p>
+    <code>CMS_PHRASE</code> and <code>DOOR_PHRASE</code> are what unlock
+    <code>/admin</code> and <code>/door</code> in production. A stale comment in
+    the source claimed built-in hashes would take over if they were unset. They do
+    not &mdash; staff login answers 503. The comment has been corrected. The live
+    site currently returns 401 to a wrong phrase, confirming the variables are
+    set and both panels unlock.
+  </p>
+</div>
+
+<h2>Verification</h2>
+
+<p>
+  Three scripts sit in <code>scripts/</code>. They are regression tests for the
+  defects above, not smoke tests, and each was run repeatedly against the same
+  server to confirm it stays green.
+</p>
+
+<pre><code>node scripts/fake-upstash.mjs &amp;    # stands in for Upstash
+./scripts/dev-fixtures.sh          # dev server with test fixtures
+
+./scripts/e2e-check.sh             # booking, price change, approval, door
+./scripts/concurrency-check.sh     # the stale-snapshot double entry
+./scripts/hold-expiry-check.sh     # hold sweep and late-payment revival</code></pre>
+
+<p><code>e2e-check.sh</code> walks a booking from email verification through a price
+change, proof upload, approval and three door scans. Alongside the happy path it
+asserts that a paid-for amount stops moving once a UTR is in, that the CMS is
+never handed the QR signing material or the payment screenshot, that each panel
+rejects the other panels' session cookies, and that <code>__proto__</code> leaves
+the prototype alone.</p>
+
+<p>Also confirmed: production build succeeds, lint and typecheck are clean, CI is
+green on all eight commits, and the live site serves its pricing endpoint with
+<code>no-store</code> so an edited price is never cached.</p>
+
+<footer>
+  UTOPIA &mdash; AVION Productions &middot; prepared for Meghanath &middot;
+  4 September 2026 &middot; <span class="mono">main</span> at
+  <span class="mono">862bb1a</span>
+</footer>
+
+</body>
+</html>
