@@ -2,11 +2,13 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { orderLines, type OrderLine } from "@/lib/cart";
+import { cartCount, cartFromOrder, orderLines, type OrderLine } from "@/lib/cart";
+import { parseScanPayload } from "@/lib/pass-scan";
 import type { PassId } from "@/lib/passes";
 import { DEFAULT_PASS_PRICES } from "@/lib/passes";
+import { priceCart } from "@/lib/pricing";
 import { isJpegDataUrl } from "./jpeg";
-import { derivePassDigits } from "./pass-code";
+import { compactPassToken, derivePassDigits, verifyCompactPassToken } from "./pass-code";
 import { getPhraseHashes } from "./phrase";
 import { getAuthSecret } from "./secret";
 
@@ -309,6 +311,47 @@ export function setPassPrices(input: { early: number; vip: number }): {
   return getPassPrices();
 }
 
+export function reservationHasProof(order: Order): boolean {
+  return Boolean(
+    order.utr || order.paidSubmittedAt || order.paymentProofData || order.hasPaymentProof,
+  );
+}
+
+/** Unpaid holds without proof follow the live CMS price. Paid orders stay frozen. */
+export function applyLivePricesToReservation(order: Order, persistNow = true): boolean {
+  if (order.status !== "reserved") return false;
+  if (reservationHasProof(order)) return false;
+  const cart = cartFromOrder(order);
+  if (cartCount(cart) < 1) return false;
+  const totals = priceCart(cart, getPassPrices());
+  const unchanged =
+    order.total === totals.total &&
+    order.subtotal === totals.subtotal &&
+    order.unitPrice === totals.unitPrice &&
+    order.quantity === totals.quantity &&
+    order.passId === totals.passId &&
+    JSON.stringify(order.lines ?? []) === JSON.stringify(totals.lines);
+  if (unchanged) return false;
+  order.total = totals.total;
+  order.subtotal = totals.subtotal;
+  order.fee = totals.fee;
+  order.unitPrice = totals.unitPrice;
+  order.quantity = totals.quantity;
+  order.passId = totals.passId;
+  order.lines = totals.lines;
+  if (persistNow) persist();
+  return true;
+}
+
+export function repriceOpenReservations(): number {
+  let updated = 0;
+  for (const order of Object.values(db.orders)) {
+    if (applyLivePricesToReservation(order, false)) updated += 1;
+  }
+  if (updated > 0) persist();
+  return updated;
+}
+
 function secret(): string {
   return getAuthSecret();
 }
@@ -448,7 +491,6 @@ function decodePurposeToken(purpose: TokenPurpose, token: string): { subject: st
 
 const TOKEN_TTL_MS = 30 * 60 * 1000;
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-const PASS_QR_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 
 export function signToken(email: string): string {
   return signPurposeToken("verify-email", email, TOKEN_TTL_MS);
@@ -504,6 +546,8 @@ export function verifyDoorSession(token: string): { username: string } | null {
 }
 
 export function verifyPassToken(token: string): { orderId: string; passCode: string } | null {
+  const compact = verifyCompactPassToken(token);
+  if (compact) return compact;
   const decoded = decodePurposeToken("pass-qr", token);
   if (!decoded) return null;
   const lastColon = decoded.subject.lastIndexOf(":");
@@ -671,7 +715,7 @@ function mintPass(order: Order): void {
         id,
         passId: line.passId,
         passCode,
-        qrToken: signPurposeToken("pass-qr", `${order.id}:${passCode}`, PASS_QR_TTL_MS),
+        qrToken: compactPassToken(order.id, passCode),
       });
     }
   }
@@ -779,33 +823,6 @@ export function transferOrder(
 export function listScans(limit = 200): ScanLog[] {
   if (!Array.isArray(db.scans)) db.scans = [];
   return db.scans.slice(0, limit);
-}
-
-export function parseScanPayload(raw: string): { token?: string; code?: string; reference?: string } {
-  const trimmed = raw.trim();
-  if (!trimmed) return {};
-
-  const digits = trimmed.replace(/\D/g, "");
-  if (digits.length === 6) return { code: digits };
-
-  if (/^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(trimmed)) {
-    return { reference: trimmed.toUpperCase() };
-  }
-
-  try {
-    const url = new URL(trimmed);
-    const fromQuery = url.searchParams.get("p");
-    if (fromQuery) return { token: fromQuery };
-  } catch {
-    // Not a URL — keep parsing.
-  }
-
-  const parts = trimmed.split("|");
-  if (parts[0] === "UTP" && parts.length >= 4) {
-    return { code: parts[2], token: parts.slice(3).join("|") };
-  }
-
-  return { token: trimmed };
 }
 
 export type ScanPassResult = {
@@ -954,7 +971,7 @@ function restoreTickets(
   if (!tickets || tickets.length === 0) return undefined;
   return tickets.map((ticket) => ({
     ...ticket,
-    qrToken: signPurposeToken("pass-qr", `${orderId}:${ticket.passCode}`, PASS_QR_TTL_MS),
+    qrToken: compactPassToken(orderId, ticket.passCode),
   }));
 }
 

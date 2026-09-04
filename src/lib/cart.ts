@@ -45,6 +45,23 @@ export function orderLines(order: {
   return [{ passId: order.passId, quantity: order.quantity, unitPrice: order.unitPrice }];
 }
 
+export function cartFromOrder(order: {
+  passId: PassId;
+  quantity: number;
+  unitPrice: number;
+  lines?: OrderLine[];
+}): CartQty {
+  const lines = orderLines(order);
+  return {
+    early: lines
+      .filter((line) => line.passId === "early")
+      .reduce((sum, line) => sum + line.quantity, 0),
+    vip: lines
+      .filter((line) => line.passId === "vip")
+      .reduce((sum, line) => sum + line.quantity, 0),
+  };
+}
+
 export function formatCartLabel(lines: OrderLine[]): string {
   if (lines.length === 0) return "No passes";
   return lines.map((line) => `${line.quantity} × ${getPassById(line.passId).name}`).join(" + ");

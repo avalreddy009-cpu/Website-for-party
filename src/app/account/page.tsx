@@ -225,7 +225,7 @@ export default function AccountPage() {
                       <img
                         src={ticket.passQr}
                         alt={`${getPassById(ticket.passId).name} QR`}
-                        className="size-32 rounded-xl bg-white p-2"
+                        className="size-44 rounded-xl bg-white p-2.5 sm:size-52"
                       />
                     )}
                     <div>

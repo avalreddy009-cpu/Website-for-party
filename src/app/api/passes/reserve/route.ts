@@ -5,7 +5,6 @@ import { EVENT } from "@/lib/event";
 import { priceCart } from "@/lib/pricing";
 import { fieldErrors, reserveSchema } from "@/lib/validation";
 import { sendOrderConfirmation } from "@/server/mailer";
-import { qrDataUrl } from "@/server/pass-code";
 import { clientKey, rateLimit } from "@/server/rate-limit";
 import { upsertPassWallet } from "@/server/pass-wallet";
 import {
@@ -16,7 +15,8 @@ import {
   hydrateStore,
   markEmailReserved,
 } from "@/server/store";
-import { buildUpiUri, getUpiConfig } from "@/server/upi";
+import { getUpiConfig } from "@/server/upi";
+import { renderUpiPayment } from "@/server/upi-qr";
 
 export const runtime = "nodejs";
 
@@ -85,15 +85,7 @@ export async function POST(request: Request) {
     EVENT.holdMinutes,
   );
 
-  const upiUri = buildUpiUri(order.total, `UTOPIA ${order.reference}`);
-  let upiQr: string | undefined;
-  if (upiUri) {
-    try {
-      upiQr = await qrDataUrl(upiUri);
-    } catch (error) {
-      console.error("[utopia] UPI QR render failed", error);
-    }
-  }
+  const payment = await renderUpiPayment(order.total, `UTOPIA ${order.reference}`);
 
   try {
     await sendOrderConfirmation(order);
@@ -111,9 +103,9 @@ export async function POST(request: Request) {
     reference: order.reference,
     total: order.total,
     holdExpiresAt: order.holdExpiresAt,
-    vpa: upi.vpa,
-    payeeName: upi.payeeName,
-    upiUri,
-    upiQr,
+    vpa: payment.vpa,
+    payeeName: payment.payeeName,
+    upiUri: payment.upiUri,
+    upiQr: payment.upiQr,
   });
 }

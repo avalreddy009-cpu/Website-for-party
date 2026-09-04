@@ -121,6 +121,16 @@ export const orderIdSchema = z
 
 export const transferOrderSchema = buyerSchema;
 
+export const refreshHoldSchema = z.object({
+  email: emailSchema,
+  reference: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/, "That doesn't look like a reservation reference"),
+  verificationToken: z.string().min(10, "Verify your email first"),
+});
+
 export const passPricesSchema = z.object({
   early: z.coerce
     .number()

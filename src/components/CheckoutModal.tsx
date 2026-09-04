@@ -232,12 +232,13 @@ function CheckoutFlow({
   const [copied, setCopied] = useState(false);
   const [utr, setUtr] = useState("");
   const [proof, setProof] = useState<PaymentScreenshot | null>(null);
-  const { catalog, prices, byId } = usePassCatalog();
+  const { catalog, prices, byId, refresh: refreshCatalog } = usePassCatalog();
   const quantity = cartCount(cart);
   const tierId = cart.vip > 0 && cart.early === 0 ? "vip" : cart.early > 0 && cart.vip === 0 ? "early" : initialPass.id;
   const tier = byId(tierId);
   const totals = useMemo(() => priceCart(cart, prices), [cart, prices]);
   const cartLabel = formatCartLabel(totals.lines);
+  const displayTotal = step >= 4 && reservation ? reservation.total : totals.total;
 
   const resendIn =
     resendAt && now ? Math.max(0, Math.ceil((resendAt - now) / 1000)) : 0;
@@ -257,6 +258,33 @@ function CheckoutFlow({
     },
     [step],
   );
+
+  useEffect(() => {
+    refreshCatalog();
+  }, [step, refreshCatalog]);
+
+  useEffect(() => {
+    if (step !== 4 || !reservation?.reference || !token || utr || proof) return;
+    const reference = reservation.reference;
+    let cancelled = false;
+    const refreshHold = async () => {
+      const result = await postJson<Reservation>("/api/passes/refresh-hold", {
+        email: form.email,
+        reference,
+        verificationToken: token,
+      });
+      if (cancelled || !result.ok) return;
+      setReservation((prev) => (prev ? { ...prev, ...result.data } : prev));
+    };
+    void refreshHold();
+    const interval = window.setInterval(() => {
+      void refreshHold();
+    }, 12_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [step, reservation?.reference, token, form.email, utr, proof]);
 
   /** Details → send the code. */
   const requestCode = useCallback(
@@ -638,12 +666,12 @@ function CheckoutFlow({
                 {cartLabel}
               </p>
               <motion.p
-                key={totals.total}
+                key={displayTotal}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="font-display text-2xl leading-none font-light text-bone tabular-nums sm:text-3xl"
               >
-                {formatPrice(totals.total)}
+                {formatPrice(displayTotal)}
               </motion.p>
             </div>
 

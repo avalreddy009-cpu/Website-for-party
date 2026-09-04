@@ -133,10 +133,6 @@ export default function DoorPage() {
           setError(data.error ?? "Scan didn't go through.");
           return;
         }
-        if (source === "camera" && data.result === "invalid") {
-          void loadLogs();
-          return;
-        }
         setLatest(data);
         setManual("");
         void loadLogs();
@@ -180,8 +176,8 @@ export default function DoorPage() {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
           },
         });
         if (cancelled) {
@@ -202,36 +198,44 @@ export default function DoorPage() {
         let lastAttempt = 0;
         let stableValue = "";
         let stableHits = 0;
+        let inFlight = false;
 
         const tick = () => {
           if (cancelled) return;
           raf = requestAnimationFrame(tick);
           const live = videoRef.current;
-          if (!live || scanningRef.current) return;
+          if (!live || scanningRef.current || inFlight) return;
           const now = Date.now();
-          if (now - lastAttempt < 180) return;
+          if (now - lastAttempt < 120) return;
           lastAttempt = now;
 
-          const value = decodeQrFromVideo(live, canvas);
-          if (!value || !looksLikePassQr(value)) {
-            stableValue = "";
-            stableHits = 0;
-            return;
-          }
-          if (value === stableValue) stableHits += 1;
-          else {
-            stableValue = value;
-            stableHits = 1;
-          }
-          if (stableHits < 3) return;
+          inFlight = true;
+          void decodeQrFromVideo(live, canvas)
+            .then((value) => {
+              if (cancelled || scanningRef.current) return;
+              if (!value || !looksLikePassQr(value)) {
+                stableValue = "";
+                stableHits = 0;
+                return;
+              }
+              if (value === stableValue) stableHits += 1;
+              else {
+                stableValue = value;
+                stableHits = 1;
+              }
+              if (stableHits < 2) return;
 
-          scanningRef.current = true;
-          stableHits = 0;
-          void submitScanRef.current(value, "camera").finally(() => {
-            window.setTimeout(() => {
-              scanningRef.current = false;
-            }, 2000);
-          });
+              scanningRef.current = true;
+              stableHits = 0;
+              void submitScanRef.current(value, "camera").finally(() => {
+                window.setTimeout(() => {
+                  scanningRef.current = false;
+                }, 1600);
+              });
+            })
+            .finally(() => {
+              inFlight = false;
+            });
         };
         raf = requestAnimationFrame(tick);
       } catch {
@@ -288,7 +292,8 @@ export default function DoorPage() {
                 </p>
                 <h1 className="font-display mt-1 text-3xl font-light text-bone">Scan a pass</h1>
                 <p className="mt-2 max-w-md text-xs text-bone/45">
-                  Point the camera at the pass QR, or type the 6-digit door code.
+                  Point the camera at the pass QR on their phone or email. Bright
+                  screen, fill the frame. Or type the 6-digit door code.
                 </p>
               </div>
               <button

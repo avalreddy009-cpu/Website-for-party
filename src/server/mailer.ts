@@ -291,7 +291,7 @@ export async function sendPassApproved(order: Order): Promise<SendResult> {
          <p style="margin:0 0 8px;padding:16px;background:#11132a;border:1px solid #3a3f7a;border-radius:12px;text-align:center;
                    font-family:'Courier New',monospace;font-size:34px;letter-spacing:.34em;color:#ffffff">${ticket.passCode}</p>
          <p style="margin:0 0 8px;text-align:center">
-           <img src="cid:${cid}" alt="UTOPIA pass QR ${index + 1}" width="220" height="220" style="width:220px;height:220px;border-radius:16px;background:#ffffff;padding:10px" />
+           <img src="cid:${cid}" alt="UTOPIA pass QR ${index + 1}" width="280" height="280" style="width:280px;height:280px;border-radius:16px;background:#ffffff;padding:12px" />
          </p>`,
       );
     } catch (error) {
