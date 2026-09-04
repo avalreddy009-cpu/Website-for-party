@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { getPassById } from "@/lib/passes";
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassApproved } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
@@ -42,8 +41,7 @@ export async function POST(
   }
 
   try {
-    const pass = getPassById(result.order.passId);
-    await sendPassApproved(result.order, pass.name);
+    await sendPassApproved(result.order);
   } catch (error) {
     console.error("[utopia] approval email failed", error);
   }

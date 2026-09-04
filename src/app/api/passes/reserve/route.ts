@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { cartFromUnknown, formatCartLabel } from "@/lib/cart";
+import { cartFromUnknown } from "@/lib/cart";
 import { EVENT } from "@/lib/event";
-import { getPassById } from "@/lib/passes";
 import { priceCart } from "@/lib/pricing";
 import { fieldErrors, reserveSchema } from "@/lib/validation";
 import { sendOrderConfirmation } from "@/server/mailer";
@@ -63,7 +62,6 @@ export async function POST(request: Request) {
 
   const prices = { early: getPassPrice("early"), vip: getPassPrice("vip") };
   const totals = priceCart(cart, prices);
-  const pass = getPassById(totals.passId);
   const upi = getUpiConfig();
 
   if (!upi.configured) {
@@ -98,7 +96,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await sendOrderConfirmation(order, formatCartLabel(totals.lines) || pass.name);
+    await sendOrderConfirmation(order);
   } catch (error) {
     console.error("[utopia] confirmation email failed", error);
   }

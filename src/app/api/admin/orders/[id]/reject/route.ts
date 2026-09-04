@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { getPassById } from "@/lib/passes";
 import { fieldErrors, rejectOrderSchema } from "@/lib/validation";
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassRejected } from "@/server/mailer";
@@ -55,8 +54,7 @@ export async function POST(
   }
 
   try {
-    const pass = getPassById(result.order.passId);
-    await sendPassRejected(result.order, pass.name, parsed.data.reason);
+    await sendPassRejected(result.order, parsed.data.reason);
   } catch (error) {
     console.error("[utopia] rejection email failed", error);
   }

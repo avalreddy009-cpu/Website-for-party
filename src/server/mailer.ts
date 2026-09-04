@@ -228,9 +228,15 @@ export async function sendLoginCode(to: string, code: string): Promise<SendResul
   return send(to, `${code} is your UTOPIA login code`, html, text);
 }
 
-export async function sendOrderConfirmation(order: Order, passName: string): Promise<SendResult> {
+function orderPassLabel(order: Order): string {
+  const fromLines = formatCartLabel(orderLines(order));
+  if (fromLines && fromLines !== "No passes") return fromLines;
+  return getPassById(order.passId).name;
+}
+
+export async function sendOrderConfirmation(order: Order): Promise<SendResult> {
   const firstName = escapeHtml(order.buyer.name.split(" ")[0] || "there");
-  const label = formatCartLabel(orderLines(order)) || passName;
+  const label = orderPassLabel(order);
   const passNameSafe = escapeHtml(label);
   const row = (key: string, value: string) =>
     `<tr>
@@ -260,9 +266,9 @@ export async function sendOrderConfirmation(order: Order, passName: string): Pro
   return send(order.buyer.email, `Pay UPI: ${order.reference} — UTOPIA`, html, text);
 }
 
-export async function sendPassApproved(order: Order, passName: string): Promise<SendResult> {
+export async function sendPassApproved(order: Order): Promise<SendResult> {
   const firstName = escapeHtml(order.buyer.name.split(" ")[0] || "there");
-  const label = formatCartLabel(orderLines(order)) || passName;
+  const label = orderPassLabel(order);
   const passNameSafe = escapeHtml(label);
   const nameSafe = escapeHtml(order.buyer.name);
   const tickets = ticketsForOrder(order);
@@ -328,12 +334,11 @@ export async function sendPassApproved(order: Order, passName: string): Promise<
 /** Old owner: pass moved. No new codes — those only go to the new inbox. */
 export async function sendPassTransferredAway(
   previous: { name: string; email: string },
-  reference: string,
-  passName: string,
+  order: Order,
 ): Promise<SendResult> {
   const firstName = escapeHtml(previous.name.split(" ")[0] || "there");
-  const refSafe = escapeHtml(reference);
-  const passNameSafe = escapeHtml(passName);
+  const refSafe = escapeHtml(order.reference);
+  const passNameSafe = escapeHtml(orderPassLabel(order));
   const html = shell(
     "Your pass was moved",
     `<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#c9cadb">
@@ -344,17 +349,16 @@ export async function sendPassTransferredAway(
        If you didn't ask for this, reply to this email right now.
      </p>`,
   );
-  const text = `${previous.name.split(" ")[0] || "there"}, your UTOPIA pass ${reference} was moved by AVION staff. The old QR and door code no longer work. Reply if this wasn't you.`;
-  return send(previous.email, `Pass moved: ${reference}`, html, text);
+  const text = `${previous.name.split(" ")[0] || "there"}, your UTOPIA pass ${order.reference} was moved by AVION staff. The old QR and door code no longer work. Reply if this wasn't you.`;
+  return send(previous.email, `Pass moved: ${order.reference}`, html, text);
 }
 
 export async function sendPassRejected(
   order: Order,
-  passName: string,
   reason?: string,
 ): Promise<SendResult> {
   const firstName = escapeHtml(order.buyer.name.split(" ")[0] || "there");
-  const passNameSafe = escapeHtml(passName);
+  const passNameSafe = escapeHtml(orderPassLabel(order));
   const reasonSafe = reason ? escapeHtml(reason) : "";
   const html = shell(
     "We couldn't confirm this one",

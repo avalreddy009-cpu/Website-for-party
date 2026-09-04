@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { getPassById } from "@/lib/passes";
 import { fieldErrors, orderIdSchema, transferOrderSchema } from "@/lib/validation";
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassApproved, sendPassTransferredAway } from "@/server/mailer";
@@ -73,18 +72,16 @@ export async function POST(
     );
   }
 
-  const pass = getPassById(result.order.passId);
-
   try {
     if (result.previousBuyer.email !== result.order.buyer.email) {
-      await sendPassTransferredAway(result.previousBuyer, result.order.reference, pass.name);
+      await sendPassTransferredAway(result.previousBuyer, result.order);
     }
   } catch (error) {
     console.error("[utopia] transfer notice to previous owner failed", error);
   }
 
   try {
-    await sendPassApproved(result.order, pass.name);
+    await sendPassApproved(result.order);
   } catch (error) {
     console.error("[utopia] transfer pass email failed", error);
   }
