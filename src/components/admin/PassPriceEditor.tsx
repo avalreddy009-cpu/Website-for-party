@@ -137,7 +137,11 @@ export function PassPriceEditor() {
                   Shows as {formatPrice(Number(value) || 0)}
                 </span>
               </label>
-              <UpiPreviewCard passId={pass.id} preview={preview} />
+              <UpiPreviewCard
+                passId={pass.id}
+                preview={preview}
+                stale={Boolean(preview) && Number(value) !== preview?.amount}
+              />
             </div>
           );
         })}
@@ -160,24 +164,34 @@ export function PassPriceEditor() {
   );
 }
 
+/**
+ * The QR is always built from the price that is actually saved, never from what
+ * is currently typed in the box — otherwise it would promise an amount the
+ * server isn't charging. When the two differ, say so instead of looking broken.
+ */
 function UpiPreviewCard({
   passId,
   preview,
+  stale,
 }: {
   passId: PassId;
   preview?: UpiPreview;
+  stale: boolean;
 }) {
   if (!preview) {
     return (
       <span className="mt-4 block font-mono text-[9px] tracking-[0.16em] text-bone/30 uppercase">
-        Save to refresh the UPI QR for one {passId === "vip" ? "VIP" : "STANDARD"} pass
+        Save to build the UPI QR for one {passId === "vip" ? "VIP" : "STANDARD"} pass
       </span>
     );
   }
 
   return (
     <span className="mt-4 flex items-center gap-3 rounded-2xl border border-white/8 bg-black/25 p-3">
-      <span className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1.5">
+      <span
+        className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1.5 transition-opacity"
+        style={{ opacity: stale ? 0.35 : 1 }}
+      >
         {preview.upiQr ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={preview.upiQr} alt={`${passId} UPI QR`} className="size-full object-contain" />
@@ -189,7 +203,7 @@ function UpiPreviewCard({
       </span>
       <span className="min-w-0">
         <span className="block font-mono text-[8px] tracking-[0.2em] text-bone/40 uppercase">
-          UPI QR · 1 PASS
+          {stale ? "SAVE TO UPDATE THIS QR" : "LIVE UPI QR · 1 PASS"}
         </span>
         <span className="mt-1 block font-display text-lg text-bone tabular-nums">
           {formatPrice(preview.amount)}

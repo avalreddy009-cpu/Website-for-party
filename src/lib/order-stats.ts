@@ -34,9 +34,9 @@ export function summarizeOrders(orders: Order[]): OrderStats {
     stats.paid += 1;
     stats.revenue += order.total;
     for (const line of orderLines(order)) {
-      // An order imported from an old shape can carry a pass id we no longer
-      // sell. Counting it into a missing bucket used to throw and take the
-      // whole CMS dashboard down with it.
+      // An order imported from an older shape can carry a pass id we no longer
+      // sell. Reaching into a bucket that isn't there throws, and this runs
+      // inside the CMS order list, so one bad row would 500 the whole page.
       const bucket = byPass[line.passId];
       if (!bucket) continue;
       bucket.sold += line.quantity;
