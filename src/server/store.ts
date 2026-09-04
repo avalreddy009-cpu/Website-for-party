@@ -122,6 +122,7 @@ type Db = {
 const DATA_FILE = join(process.cwd(), ".data", "utopia.json");
 const CODE_TTL_MS = 10 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 45 * 1000;
+const SEND_WINDOW_MS = 30 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_WINDOW = 5;
 
@@ -213,21 +214,110 @@ function snapshotDb(): Db {
   };
 }
 
-function mergeRemote(remote: Partial<Db>): void {
-  const rank = (status: OrderStatus) =>
-    status === "paid" ? 4 : status === "reserved" ? 3 : status === "rejected" ? 2 : 1;
+const STATUS_RANK: Record<OrderStatus, number> = {
+  paid: 4,
+  reserved: 3,
+  rejected: 2,
+  cancelled: 1,
+  expired: 1,
+};
 
+function earliest(a?: number, b?: number): number | undefined {
+  if (typeof a !== "number") return b;
+  if (typeof b !== "number") return a;
+  return Math.min(a, b);
+}
+
+/** Of two copies of the same order, the one that has travelled further. */
+function fresher(local: Order, remote: Order): Order {
+  const byStatus = STATUS_RANK[remote.status] - STATUS_RANK[local.status];
+  if (byStatus !== 0) return byStatus > 0 ? remote : local;
+
+  const transfers = (order: Order) => order.transferHistory?.length ?? 0;
+  if (transfers(remote) !== transfers(local)) {
+    return transfers(remote) > transfers(local) ? remote : local;
+  }
+  return remote;
+}
+
+/**
+ * Entries, revoked codes and payment proof are one-way latches: once a ticket
+ * has been scanned in, nothing is allowed to un-scan it.
+ *
+ * `persistRemote` writes the whole database as one blob, so two instances that
+ * hydrate at the same time and then both write will clobber each other. Taking
+ * the union of the facts that matter means the worst case is a stale price or
+ * name, not a guest who gets admitted twice on the same QR.
+ */
+function latchOrder(base: Order, other: Order): Order {
+  const merged: Order = { ...base };
+
+  merged.enteredAt = earliest(base.enteredAt, other.enteredAt);
+  merged.entryCount = Math.max(base.entryCount ?? 0, other.entryCount ?? 0) || undefined;
+
+  if (base.tickets) {
+    const twins = other.tickets ?? [];
+    merged.tickets = base.tickets.map((ticket) => {
+      const twin = twins.find(
+        (item) => item.id === ticket.id || item.passCode === ticket.passCode,
+      );
+      const enteredAt = earliest(ticket.enteredAt, twin?.enteredAt);
+      return enteredAt === ticket.enteredAt ? ticket : { ...ticket, enteredAt };
+    });
+  }
+
+  const revoked = new Set([
+    ...(base.revokedPassCodes ?? []),
+    ...(other.revokedPassCodes ?? []),
+  ]);
+  if (revoked.size > 0) merged.revokedPassCodes = [...revoked].slice(-80);
+
+  // A buyer uploading proof and staff deciding on it can land on different
+  // instances. Losing the screenshot means asking them to upload it again.
+  if (!merged.paymentProofData && other.paymentProofData) {
+    merged.paymentProofData = other.paymentProofData;
+    merged.paymentProofName = other.paymentProofName;
+    merged.paymentProofMime = other.paymentProofMime;
+  }
+  merged.paidSubmittedAt = earliest(base.paidSubmittedAt, other.paidSubmittedAt);
+  merged.utr ??= other.utr;
+  merged.paymentRef ??= other.paymentRef;
+
+  return merged;
+}
+
+function mergeRemote(remote: Partial<Db>): void {
   for (const [id, incoming] of Object.entries(remote.orders ?? {})) {
     const current = db.orders[id];
-    if (!current || rank(incoming.status) >= rank(current.status)) {
+    if (!current) {
       db.orders[id] = incoming;
+      continue;
     }
+    const base = fresher(current, incoming);
+    db.orders[id] = latchOrder(base, base === incoming ? current : incoming);
   }
   for (const [email, incoming] of Object.entries(remote.verifications ?? {})) {
     const current = db.verifications[email];
-    if (!current || incoming.lastSentAt >= current.lastSentAt) {
+    if (!current) {
       db.verifications[email] = incoming;
+      continue;
     }
+    // Newest send wins the code itself, but failed attempts and "this
+    // verification already booked" only ever ratchet up. Taking the remote
+    // record wholesale would hand out a fresh set of OTP guesses, or a second
+    // reservation, every time the two instances disagreed.
+    const base = incoming.lastSentAt >= current.lastSentAt ? incoming : current;
+    const other = base === incoming ? current : incoming;
+    const sameCode = base.codeHash === other.codeHash;
+    db.verifications[email] = {
+      ...base,
+      attempts: sameCode ? Math.max(base.attempts, other.attempts) : base.attempts,
+      sendCount: Math.max(base.sendCount, other.sendCount),
+      verifiedAt: sameCode ? (base.verifiedAt ?? other.verifiedAt) : base.verifiedAt,
+      reserveUsedAt: sameCode
+        ? earliest(base.reserveUsedAt, other.reserveUsedAt)
+        : base.reserveUsedAt,
+    };
   }
   if (Array.isArray(remote.scans) && remote.scans.length > 0) {
     const seen = new Set(db.scans.map((scan) => scan.id));
@@ -311,42 +401,43 @@ export function setPassPrices(input: { early: number; vip: number }): {
   return getPassPrices();
 }
 
-export function reservationHasProof(order: Order): boolean {
-  return Boolean(
-    order.utr || order.paidSubmittedAt || order.paymentProofData || order.hasPaymentProof,
-  );
+/** Has the buyer already sent us money for this hold? */
+function awaitingDecision(order: Order): boolean {
+  return Boolean(order.utr || order.paidSubmittedAt || order.paymentProofData);
 }
 
-/** Unpaid holds without proof follow the live CMS price. Paid orders stay frozen. */
-export function applyLivePricesToReservation(order: Order, persistNow = true): boolean {
-  if (order.status !== "reserved") return false;
-  if (reservationHasProof(order)) return false;
+/**
+ * A hold nobody has paid yet follows the live CMS price, so the amount baked
+ * into its UPI QR is the amount on the site. Once a UTR is in, or staff have
+ * decided, the price is whatever they actually transferred.
+ */
+function repriceHold(order: Order): boolean {
+  if (order.status !== "reserved" || awaitingDecision(order)) return false;
+
   const cart = cartFromOrder(order);
   if (cartCount(cart) < 1) return false;
+
   const totals = priceCart(cart, getPassPrices());
-  const unchanged =
-    order.total === totals.total &&
-    order.subtotal === totals.subtotal &&
-    order.unitPrice === totals.unitPrice &&
-    order.quantity === totals.quantity &&
-    order.passId === totals.passId &&
-    JSON.stringify(order.lines ?? []) === JSON.stringify(totals.lines);
-  if (unchanged) return false;
-  order.total = totals.total;
+  if (totals.total === order.total && totals.unitPrice === order.unitPrice) return false;
+
+  order.unitPrice = totals.unitPrice;
   order.subtotal = totals.subtotal;
   order.fee = totals.fee;
-  order.unitPrice = totals.unitPrice;
-  order.quantity = totals.quantity;
-  order.passId = totals.passId;
+  order.total = totals.total;
   order.lines = totals.lines;
-  if (persistNow) persist();
   return true;
+}
+
+export function repriceReservation(order: Order): boolean {
+  const changed = repriceHold(order);
+  if (changed) persist();
+  return changed;
 }
 
 export function repriceOpenReservations(): number {
   let updated = 0;
   for (const order of Object.values(db.orders)) {
-    if (applyLivePricesToReservation(order, false)) updated += 1;
+    if (repriceHold(order)) updated += 1;
   }
   if (updated > 0) persist();
   return updated;
@@ -375,6 +466,10 @@ export type IssueResult =
 export function issueCode(email: string): IssueResult {
   const now = Date.now();
   const existing = db.verifications[email];
+  // Sends decay with the code window, so an abandoned attempt doesn't lock the
+  // address out forever. The counter has to reset with it — otherwise it only
+  // ever climbs and the fifth code someone asks for is their last one, ever.
+  const withinWindow = existing ? now - existing.lastSentAt < SEND_WINDOW_MS : false;
 
   if (existing) {
     const sinceLastSend = now - existing.lastSentAt;
@@ -385,11 +480,12 @@ export function issueCode(email: string): IssueResult {
         retryAfterSeconds: Math.ceil((RESEND_COOLDOWN_MS - sinceLastSend) / 1000),
       };
     }
-    // Sends decay with the code window, so an abandoned attempt doesn't lock
-    // the address out forever.
-    const withinWindow = now - existing.lastSentAt < CODE_TTL_MS * 3;
     if (withinWindow && existing.sendCount >= MAX_SENDS_PER_WINDOW) {
-      return { ok: false, reason: "too-many", retryAfterSeconds: 15 * 60 };
+      return {
+        ok: false,
+        reason: "too-many",
+        retryAfterSeconds: Math.ceil((existing.lastSentAt + SEND_WINDOW_MS - now) / 1000),
+      };
     }
   }
 
@@ -400,7 +496,7 @@ export function issueCode(email: string): IssueResult {
     expiresAt: now + CODE_TTL_MS,
     attempts: 0,
     lastSentAt: now,
-    sendCount: (existing?.sendCount ?? 0) + 1,
+    sendCount: withinWindow ? (existing?.sendCount ?? 0) + 1 : 1,
     verifiedAt: undefined,
   };
   persist();
@@ -862,10 +958,11 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
     const candidate = getOrderByReference(parsed.reference);
     if (candidate) {
       const tickets = ticketsForOrder(candidate);
-      if (tickets.length <= 1) {
-        order = candidate;
-        ticket = tickets[0];
-      }
+      // Staff typing a reference means "let the next one of this group in", so
+      // hand back the first unused ticket. Falling through on a group booking
+      // used to report NOT A PASS, which reads like a forgery at the door.
+      order = candidate;
+      ticket = tickets.find((item) => !item.enteredAt) ?? tickets[0];
     }
   }
 
@@ -879,6 +976,14 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
       order = chosen;
       ticket = ticketsForOrder(chosen).find((item) => item.passCode === parsed.code);
     }
+  }
+
+  // A transferred or recovered pass revokes the codes it was sold under.
+  // Nothing above should resolve one, but the door is the wrong place to find
+  // out we were wrong about that.
+  if (order && parsed.code && (order.revokedPassCodes ?? []).includes(parsed.code)) {
+    order = undefined;
+    ticket = undefined;
   }
 
   let result: ScanResult = "invalid";
@@ -1045,12 +1150,15 @@ export function importWalletPass(pass: WalletPass): Order | null {
 
   if (pass.status !== "paid") return null;
 
+  // `unitPrice` is per pass, not per order. Storing the total here made the CMS
+  // report a group booking's revenue as total × quantity.
+  const quantity = Math.max(1, pass.quantity);
   const order: Order = {
     id: pass.id || randomBytes(12).toString("base64url"),
     reference: pass.reference,
     passId: pass.passId,
-    quantity: pass.quantity,
-    unitPrice: pass.total,
+    quantity,
+    unitPrice: Math.round(pass.total / quantity),
     subtotal: pass.total,
     fee: 0,
     total: pass.total,

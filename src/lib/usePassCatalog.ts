@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   catalogWithPrices,
@@ -11,46 +11,57 @@ import {
   type PassTier,
 } from "@/lib/passes";
 
-function readPrices(data: Partial<PassPriceTable>): PassPriceTable | null {
-  const early = Number(data.early);
-  const vip = Number(data.vip);
-  if (Number.isInteger(early) && early >= 1 && Number.isInteger(vip) && vip >= 1) {
-    return { early, vip };
-  }
-  return null;
-}
+/**
+ * Prices are editable from the CMS, so the catalog can't be a constant. We
+ * refetch when the tab comes back to the foreground and on a slow timer — a
+ * price edit mid-event should not need everyone to reload.
+ */
+const POLL_MS = 60_000;
 
 export function usePassCatalog() {
   const [prices, setPrices] = useState<PassPriceTable>(DEFAULT_PASS_PRICES);
 
-  const refresh = useCallback(() => {
-    fetch("/api/passes/prices", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data: Partial<PassPriceTable>) => {
-        const next = readPrices(data);
-        if (next) setPrices(next);
-      })
-      .catch(() => {});
-  }, []);
-
   useEffect(() => {
-    refresh();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refresh();
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const response = await fetch("/api/passes/prices", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as Partial<PassPriceTable>;
+        const early = Number(data.early);
+        const vip = Number(data.vip);
+        if (cancelled) return;
+        if (Number.isInteger(early) && early >= 1 && Number.isInteger(vip) && vip >= 1) {
+          setPrices((prev) =>
+            prev.early === early && prev.vip === vip ? prev : { early, vip },
+          );
+        }
+      } catch {
+        // Keep whatever we're already showing.
+      }
     };
-    window.addEventListener("focus", refresh);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+
+    void load();
+    window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
-    const interval = window.setInterval(refresh, 20_000);
+    const interval = window.setInterval(() => void load(), POLL_MS);
+
     return () => {
-      window.removeEventListener("focus", refresh);
+      cancelled = true;
+      window.removeEventListener("focus", onVisible);
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(interval);
     };
-  }, [refresh]);
+  }, []);
 
   const catalog = catalogWithPrices(prices);
   const byId = (id: PassId): PassTier =>
     catalog.find((pass) => pass.id === id) ?? PASSES[0];
 
-  return { catalog, prices, byId, refresh };
+  return { catalog, prices, byId };
 }

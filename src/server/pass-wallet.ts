@@ -7,6 +7,9 @@ import { toWalletPass, type Order, type WalletPass } from "./store";
 
 const WALLET_MAX_AGE = 60 * 60 * 24 * 40;
 
+/** Browsers drop a cookie over ~4KB without telling anyone. Leave room for the name and attributes. */
+const COOKIE_BUDGET = 3600;
+
 function secret() {
   return getAuthSecret();
 }
@@ -55,13 +58,27 @@ export async function writePassWallet(email: string, orders: WalletPass[]): Prom
       unique.set(order.reference, order);
     }
   }
-  const payload = {
-    email: needle,
-    orders: [...unique.values()].slice(0, 12),
-  };
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+
+  // Newest first, so trimming to fit the cookie drops the oldest passes.
+  const kept = [...unique.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, 12);
+
+  let token = "";
+  while (kept.length > 0) {
+    const body = Buffer.from(JSON.stringify({ email: needle, orders: kept })).toString("base64url");
+    token = sign(body);
+    if (token.length <= COOKIE_BUDGET) break;
+    kept.pop();
+  }
+
   const store = await cookies();
-  store.set(PASS_WALLET_COOKIE, sign(body), {
+  if (kept.length === 0) {
+    // Nothing left that fits. Better to have no fallback than a cookie the
+    // browser silently refuses, which looks identical to being signed out.
+    store.delete(PASS_WALLET_COOKIE);
+    return;
+  }
+
+  store.set(PASS_WALLET_COOKIE, token, {
     httpOnly: true,
     secure: cookieSecure(),
     sameSite: "lax",

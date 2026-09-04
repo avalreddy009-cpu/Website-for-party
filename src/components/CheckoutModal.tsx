@@ -200,6 +200,8 @@ type Reservation = {
   payeeName?: string;
   upiUri?: string | null;
   upiQr?: string;
+  /** Set when the CMS moved the price while this hold was open. */
+  amountChanged?: boolean;
 };
 
 function CheckoutFlow({
@@ -232,7 +234,7 @@ function CheckoutFlow({
   const [copied, setCopied] = useState(false);
   const [utr, setUtr] = useState("");
   const [proof, setProof] = useState<PaymentScreenshot | null>(null);
-  const { catalog, prices, byId, refresh: refreshCatalog } = usePassCatalog();
+  const { catalog, prices, byId } = usePassCatalog();
   const quantity = cartCount(cart);
   const tierId = cart.vip > 0 && cart.early === 0 ? "vip" : cart.early > 0 && cart.vip === 0 ? "early" : initialPass.id;
   const tier = byId(tierId);
@@ -259,14 +261,14 @@ function CheckoutFlow({
     [step],
   );
 
-  useEffect(() => {
-    refreshCatalog();
-  }, [step, refreshCatalog]);
-
+  // While they're staring at the QR, keep it worth the amount the site is
+  // charging. Stops once they've started typing a UTR — by then they've paid
+  // and the number has to stop moving under them.
   useEffect(() => {
     if (step !== 4 || !reservation?.reference || !token || utr || proof) return;
     const reference = reservation.reference;
     let cancelled = false;
+
     const refreshHold = async () => {
       const result = await postJson<Reservation>("/api/passes/refresh-hold", {
         email: form.email,
@@ -274,12 +276,15 @@ function CheckoutFlow({
         verificationToken: token,
       });
       if (cancelled || !result.ok) return;
-      setReservation((prev) => (prev ? { ...prev, ...result.data } : prev));
+      setReservation((prev) => {
+        if (!prev || result.data.total === prev.total) return prev;
+        return { ...prev, ...result.data, amountChanged: true };
+      });
     };
-    void refreshHold();
+
     const interval = window.setInterval(() => {
       void refreshHold();
-    }, 12_000);
+    }, 30_000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
@@ -1407,6 +1412,13 @@ function StepPay({
             {formatPrice(reservation.total)}
           </p>
         </div>
+
+        {reservation.amountChanged && (
+          <p className="border-b border-electric-300/30 bg-electric-300/8 px-5 py-3 text-[12px] leading-relaxed text-electric-100">
+            The pass price changed while this was open, so the QR above was
+            reissued. Pay this amount — an older screenshot will come up short.
+          </p>
+        )}
 
         <div className="space-y-4 px-5 py-5">
           <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-2.5">

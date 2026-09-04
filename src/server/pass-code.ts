@@ -24,27 +24,39 @@ export function derivePassDigits(email: string, phone: string, orderId?: string)
   return String(n).padStart(6, "0");
 }
 
-const COMPACT_SIG_CHARS = 22;
+/**
+ * 22 base64url chars is ~130 bits of the HMAC, which is far more than anyone is
+ * brute-forcing through a rate-limited door endpoint, and short enough that the
+ * QR stays readable from a phone screen at arm's length.
+ */
+const SIGNATURE_CHARS = 22;
 
-/** Short door token: orderId.passCode.hmac — dense enough to scan off a phone. */
+/**
+ * `orderId.passCode.signature`. Deliberately not an expiring token: the door
+ * only admits codes that match a paid order in the store, and a transfer
+ * revokes the old code, so the signature is about forgery rather than lifetime.
+ */
 export function compactPassToken(orderId: string, passCode: string): string {
   const signature = createHmac("sha256", secret())
     .update(`pass-qr:${orderId}:${passCode}`)
     .digest("base64url")
-    .slice(0, COMPACT_SIG_CHARS);
+    .slice(0, SIGNATURE_CHARS);
   return `${orderId}.${passCode}.${signature}`;
 }
 
 export function verifyCompactPassToken(
   token: string,
 ): { orderId: string; passCode: string } | null {
-  const [orderId, passCode, signature] = token.split(".");
-  if (!orderId || !/^\d{6}$/.test(passCode ?? "") || !signature) return null;
-  if (token.split(".").length !== 3) return null;
-  const expected = compactPassToken(orderId, passCode).split(".")[2] ?? "";
-  const left = Buffer.from(signature);
-  const right = Buffer.from(expected);
-  if (left.length !== right.length || !timingSafeEqual(left, right)) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+
+  const [orderId, passCode, signature] = parts;
+  if (!orderId || !/^\d{6}$/.test(passCode)) return null;
+
+  const expected = Buffer.from(compactPassToken(orderId, passCode).split(".")[2]);
+  const given = Buffer.from(signature);
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+
   return { orderId, passCode };
 }
 
