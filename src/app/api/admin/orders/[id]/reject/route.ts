@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { fieldErrors, rejectOrderSchema } from "@/lib/validation";
+import { fieldErrors, orderIdSchema, rejectOrderSchema } from "@/lib/validation";
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassRejected } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
@@ -41,7 +41,12 @@ export async function POST(
   }
 
   const { id } = await params;
-  const result = rejectOrder(id, parsed.data.reason, session.username);
+  const parsedId = orderIdSchema.safeParse(id);
+  if (!parsedId.success) {
+    return NextResponse.json({ error: "That order doesn't exist." }, { status: 404 });
+  }
+
+  const result = rejectOrder(parsedId.data, parsed.data.reason, session.username);
 
   if (!result.ok) {
     if (result.reason === "not-found") {

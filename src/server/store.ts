@@ -286,9 +286,17 @@ function latchOrder(base: Order, other: Order): Order {
   return merged;
 }
 
+/**
+ * `obj["__proto__"] = value` reparents the object instead of adding a key, so a
+ * blob with that in it would poison every object in the process. JSON.parse
+ * happily produces such a key.
+ */
+const UNSAFE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
+
 function mergeRemote(remote: Partial<Db>): void {
   for (const [id, incoming] of Object.entries(remote.orders ?? {})) {
-    const current = db.orders[id];
+    if (UNSAFE_KEYS.has(id)) continue;
+    const current = getOrderById(id);
     if (!current) {
       db.orders[id] = incoming;
       continue;
@@ -297,7 +305,10 @@ function mergeRemote(remote: Partial<Db>): void {
     db.orders[id] = latchOrder(base, base === incoming ? current : incoming);
   }
   for (const [email, incoming] of Object.entries(remote.verifications ?? {})) {
-    const current = db.verifications[email];
+    if (UNSAFE_KEYS.has(email)) continue;
+    const current = Object.hasOwn(db.verifications, email)
+      ? db.verifications[email]
+      : undefined;
     if (!current) {
       db.verifications[email] = incoming;
       continue;
@@ -688,8 +699,13 @@ export function getOrderByReference(ref: string): Order | undefined {
   return Object.values(db.orders).find((order) => order.reference === ref);
 }
 
+/**
+ * Ids reach us straight from a URL, and `db.orders` is a plain object, so
+ * `db.orders["__proto__"]` hands back Object.prototype — truthy, mutable, and
+ * shared by everything in the process. Every lookup goes through here.
+ */
 export function getOrderById(id: string): Order | undefined {
-  return db.orders[id];
+  return Object.hasOwn(db.orders, id) ? db.orders[id] : undefined;
 }
 
 export function listOrders(): Order[] {
@@ -828,7 +844,7 @@ function mintPass(order: Order): void {
  * meant to converge on one code path, not two.
  */
 export function approveOrder(id: string, decidedBy?: string): DecisionResult {
-  const order = db.orders[id];
+  const order = getOrderById(id);
   if (!order) return { ok: false, reason: "not-found" };
   if (DECIDED_STATUSES.includes(order.status)) {
     return { ok: false, reason: "already-decided" };
@@ -844,7 +860,7 @@ export function approveOrder(id: string, decidedBy?: string): DecisionResult {
 
 /** The manual analog of a payment-gateway webhook reporting failure. */
 export function rejectOrder(id: string, reason?: string, decidedBy?: string): DecisionResult {
-  const order = db.orders[id];
+  const order = getOrderById(id);
   if (!order) return { ok: false, reason: "not-found" };
   if (DECIDED_STATUSES.includes(order.status)) {
     return { ok: false, reason: "already-decided" };
@@ -872,7 +888,7 @@ export function transferOrder(
   buyer: { name: string; email: string; phone: string },
   transferredBy?: string,
 ): TransferResult {
-  const order = db.orders[id];
+  const order = getOrderById(id);
   if (!order) return { ok: false, reason: "not-found" };
   if (order.status !== "paid") return { ok: false, reason: "not-paid" };
   if (orderHasEntry(order)) return { ok: false, reason: "already-entered" };
@@ -941,7 +957,7 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
   if (parsed.token) {
     const decoded = verifyPassToken(parsed.token);
     if (decoded) {
-      const candidate = db.orders[decoded.orderId];
+      const candidate = getOrderById(decoded.orderId);
       if (candidate) {
         const match = ticketsForOrder(candidate).find(
           (item) => item.passCode === decoded.passCode,
@@ -1132,7 +1148,7 @@ export function verifyPassClaim(token: string): WalletPass | null {
 export function importWalletPass(pass: WalletPass): Order | null {
   const email = pass.email.trim().toLowerCase();
   const existing =
-    db.orders[pass.id] ??
+    getOrderById(pass.id) ??
     getOrderByReference(pass.reference) ??
     Object.values(db.orders).find(
       (order) =>

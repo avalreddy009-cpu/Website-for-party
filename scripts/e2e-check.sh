@@ -14,10 +14,11 @@ EMAIL="e2e-$RANDOM@example.com"
 
 jqr() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const v=process.argv[1].split(".").reduce((a,k)=>a?.[k],o);console.log(v===undefined?"":typeof v==="object"?JSON.stringify(v):v)})' "$1"; }
 post() { curl -s -X POST "$BASE$1" -H 'content-type: application/json' -d "$2" "${@:3}"; }
+fail() { echo "FAIL: $1"; exit 1; }
 
 echo "== verify"
 CODE=$(post /api/passes/verify "{\"name\":\"E2E Tester\",\"email\":\"$EMAIL\",\"phone\":\"9876543210\",\"early\":2,\"vip\":1}" | jqr devCode)
-[ -n "$CODE" ] || { echo "FAIL: no devCode (is the mailer in dev mode?)"; exit 1; }
+[ -n "$CODE" ] || fail "no devCode (is the mailer in dev mode?)"
 
 TOKEN=$(post /api/passes/verify/confirm "{\"email\":\"$EMAIL\",\"code\":\"$CODE\"}" | jqr verificationToken)
 [ -n "$TOKEN" ] || { echo "FAIL: no verification token"; exit 1; }
@@ -67,6 +68,15 @@ echo "   proof blob leaked to cms: '$(echo "$APPROVED" | jqr order.paymentProofD
 
 echo "== double approve is refused"
 echo "   $(post "/api/admin/orders/$ORDER_ID/approve" '{}' -b "$CMS_JAR" | jqr error)"
+
+echo "== object keys are not order ids"
+for BAD in __proto__ constructor prototype; do
+  echo "   approve $BAD -> $(post "/api/admin/orders/$BAD/approve" '{}' -b "$CMS_JAR" | jqr error)"
+  echo "   reject  $BAD -> $(post "/api/admin/orders/$BAD/reject" '{}' -b "$CMS_JAR" | jqr error)"
+done
+POLLUTED=$(curl -s "$BASE/api/admin/orders" -b "$CMS_JAR" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{JSON.parse(s);console.log(String(({}).status??({}).paidAt??"clean"))})')
+echo "   Object.prototype after: $POLLUTED"
+[ "$POLLUTED" = "clean" ] || fail "prototype was polluted: $POLLUTED"
 
 echo "== door login + scan"
 post /api/door/login "{\"phrase\":\"$DOOR_PHRASE\"}" -c "$DOOR_JAR" >/dev/null
