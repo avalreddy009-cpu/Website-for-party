@@ -12,8 +12,9 @@ CMS_JAR=$(mktemp)
 DOOR_JAR=$(mktemp)
 trap 'rm -f "$CMS_JAR" "$DOOR_JAR"' EXIT
 
-CMS_PHRASE="abandon ability able about above absent absorb abstract absurd abuse access accident"
-DOOR_PHRASE="account accuse achieve acid acoustic acquire across act action actor actress actual"
+# Test fixtures — pass the same values to the dev server. See e2e-check.sh.
+CMS_PHRASE="${CMS_PHRASE:-abandon ability able about above absent absorb abstract absurd abuse access accident}"
+DOOR_PHRASE="${DOOR_PHRASE:-account accuse achieve acid acoustic acquire across act action actor actress actual}"
 EMAIL="race-$RANDOM@example.com"
 
 pick() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const v=process.argv[1].split(".").reduce((a,k)=>a?.[k],o);console.log(v===undefined?"":typeof v==="object"?JSON.stringify(v):v)})' "$1"; }
@@ -23,14 +24,16 @@ fail() { echo "FAIL: $1"; exit 1; }
 
 echo "== book and approve one order"
 CODE=$(post /api/passes/verify "{\"name\":\"Race Tester\",\"email\":\"$EMAIL\",\"phone\":\"9876543210\",\"early\":2}" | pick devCode)
+[ -n "$CODE" ] || fail "no devCode (is the mailer in dev mode?)"
 TOKEN=$(post /api/passes/verify/confirm "{\"email\":\"$EMAIL\",\"code\":\"$CODE\"}" | pick verificationToken)
 REF=$(post /api/passes/reserve "{\"name\":\"Race Tester\",\"email\":\"$EMAIL\",\"phone\":\"9876543210\",\"early\":2,\"verificationToken\":\"$TOKEN\"}" | pick reference)
+[ -n "$REF" ] || fail "reserve failed — is UPI_VPA set on the server?"
 JPEG=$(node -e 'const b=Buffer.concat([Buffer.from([0xff,0xd8,0xff,0xe0]),Buffer.alloc(600,0x20),Buffer.from([0xff,0xd9])]);console.log("data:image/jpeg;base64,"+b.toString("base64"))')
 post /api/passes/pay "{\"email\":\"$EMAIL\",\"reference\":\"$REF\",\"verificationToken\":\"$TOKEN\",\"utr\":\"419283749102\",\"proofName\":\"p.jpg\",\"proofMime\":\"image/jpeg\",\"proofData\":\"$JPEG\"}" >/dev/null
 
 post /api/admin/login "{\"phrase\":\"$CMS_PHRASE\"}" -c "$CMS_JAR" >/dev/null
 ORDER_ID=$(curl -s "$BASE/api/admin/orders" -b "$CMS_JAR" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const m=o.orders.find(x=>x.reference===process.argv[1]);console.log(m?m.id:"")})' "$REF")
-[ -n "$ORDER_ID" ] || fail "order missing from CMS"
+[ -n "$ORDER_ID" ] || fail "order missing from CMS — is the server running with CMS_PHRASE?"
 post "/api/admin/orders/$ORDER_ID/approve" '{}' -b "$CMS_JAR" >/dev/null
 echo "   ref=$REF"
 

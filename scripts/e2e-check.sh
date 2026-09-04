@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Walks a real booking through reserve -> price change -> pay -> approve -> door.
-# Needs the dev server running with CMS_PHRASE, DOOR_PHRASE and UPI_VPA set.
+#
+# Start the dev server with throwaway staff phrases and a UPI id first, e.g.
+#
+#   CMS_PHRASE="$CMS_PHRASE" DOOR_PHRASE="$DOOR_PHRASE" UPI_VPA=avion@upi npm run dev
+#
+# using the same values this script sends. They are test fixtures, not the
+# deployment's phrases — production reads its own from the environment.
 set -euo pipefail
 
 BASE="${BASE:-http://127.0.0.1:3000}"
@@ -8,32 +14,43 @@ CMS_JAR=$(mktemp)
 DOOR_JAR=$(mktemp)
 trap 'rm -f "$CMS_JAR" "$DOOR_JAR"' EXIT
 
-CMS_PHRASE="abandon ability able about above absent absorb abstract absurd abuse access accident"
-DOOR_PHRASE="account accuse achieve acid acoustic acquire across act action actor actress actual"
+CMS_PHRASE="${CMS_PHRASE:-abandon ability able about above absent absorb abstract absurd abuse access accident}"
+DOOR_PHRASE="${DOOR_PHRASE:-account accuse achieve acid acoustic acquire across act action actor actress actual}"
 EMAIL="e2e-$RANDOM@example.com"
 
 jqr() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);const v=process.argv[1].split(".").reduce((a,k)=>a?.[k],o);console.log(v===undefined?"":typeof v==="object"?JSON.stringify(v):v)})' "$1"; }
 post() { curl -s -X POST "$BASE$1" -H 'content-type: application/json' -d "$2" "${@:3}"; }
 fail() { echo "FAIL: $1"; exit 1; }
 
+# Prices are stored, so a previous run leaves them wherever it finished. Set a
+# known baseline instead of assuming the defaults are still in place.
+echo "== cms login + baseline prices"
+post /api/admin/login "{\"phrase\":\"$CMS_PHRASE\"}" -c "$CMS_JAR" >/dev/null
+BASE_PRICES=$(post /api/admin/prices '{"early":1249,"vip":1549}' -b "$CMS_JAR" -c "$CMS_JAR")
+if [ "$(echo "$BASE_PRICES" | jqr early)" != "1249" ]; then
+  # Staff login allows 8 attempts per 10 minutes per IP, so a few runs back to
+  # back will legitimately start refusing. Restarting the dev server clears the
+  # counters, since they live in process memory.
+  fail "CMS login failed ($(echo "$BASE_PRICES" | jqr error)). Start the server with scripts/dev-fixtures.sh, or restart it if you have been running this on a loop."
+fi
+echo "   standard=1249 vip=1549"
+
 echo "== verify"
 CODE=$(post /api/passes/verify "{\"name\":\"E2E Tester\",\"email\":\"$EMAIL\",\"phone\":\"9876543210\",\"early\":2,\"vip\":1}" | jqr devCode)
 [ -n "$CODE" ] || fail "no devCode (is the mailer in dev mode?)"
 
 TOKEN=$(post /api/passes/verify/confirm "{\"email\":\"$EMAIL\",\"code\":\"$CODE\"}" | jqr verificationToken)
-[ -n "$TOKEN" ] || { echo "FAIL: no verification token"; exit 1; }
+[ -n "$TOKEN" ] || fail "no verification token"
 
 echo "== reserve 2 standard + 1 vip"
 RES=$(post /api/passes/reserve "{\"name\":\"E2E Tester\",\"email\":\"$EMAIL\",\"phone\":\"9876543210\",\"early\":2,\"vip\":1,\"verificationToken\":\"$TOKEN\"}")
 REF=$(echo "$RES" | jqr reference)
 TOTAL=$(echo "$RES" | jqr total)
-QR1=$(echo "$RES" | jqr upiUri)
 echo "   ref=$REF total=$TOTAL"
-echo "   upi=$QR1"
-[ "$TOTAL" = "4047" ] || echo "   NOTE: total is $TOTAL (expected 4047 at default prices)"
+echo "   upi=$(echo "$RES" | jqr upiUri)"
+[ "$TOTAL" = "4047" ] || fail "expected 2x1249 + 1549 = 4047, got $TOTAL"
 
-echo "== cms login + raise prices"
-post /api/admin/login "{\"phrase\":\"$CMS_PHRASE\"}" -c "$CMS_JAR" >/dev/null
+echo "== raise prices in the cms"
 PRICES=$(post /api/admin/prices '{"early":1500,"vip":2000}' -b "$CMS_JAR" -c "$CMS_JAR")
 echo "   updatedHolds=$(echo "$PRICES" | jqr updatedHolds) early=$(echo "$PRICES" | jqr early) vip=$(echo "$PRICES" | jqr vip)"
 echo "   admin preview qr present: $(echo "$PRICES" | jqr upi.early.upiQr | head -c 30)..."
@@ -94,5 +111,8 @@ echo "   admin cookie on door: $(post /api/door/scan "{\"payload\":\"$FIRST\"}" 
 echo "   door cookie on admin: $(curl -s "$BASE/api/admin/orders" -b "$DOOR_JAR" | jqr error)"
 echo "   no cookie on proof: $(curl -s "$BASE/api/admin/orders/$ORDER_ID/proof" | jqr error)"
 
+echo "== put the prices back"
+post /api/admin/prices '{"early":1249,"vip":1549}' -b "$CMS_JAR" >/dev/null
+
 echo
-echo "ALL CHECKS DONE"
+echo "ALL CHECKS PASSED"

@@ -7,9 +7,11 @@ import { BIP39_ENGLISH } from "./bip39-english";
  * crypto wallet seed — 12 BIP39 English words — but they are *not* keys and
  * they do not control money. We store hashes only.
  *
- * Env overrides (CMS_PHRASE / DOOR_PHRASE or *_HASH) win. If those are empty,
- * we fall back to the first-deploy hashes below so /admin and /door work on
- * Vercel without a dashboard trip. Rotate by setting the env vars.
+ * Production reads CMS_PHRASE / DOOR_PHRASE (or the precomputed *_HASH) and
+ * nothing else — with neither set, staff login answers 503 rather than falling
+ * back to something baked into a public repo. The hashes below exist so a local
+ * checkout has working staff panels without any setup. Do not remove the env
+ * vars from the deployment expecting them to take over.
  */
 
 export type PhraseRole = "cms" | "door";
@@ -20,8 +22,9 @@ const WORD_SET = new Set<string>(BIP39_ENGLISH);
 const PHRASE_PEPPER = "utopia-phrase-unlock-v1";
 
 /**
- * First-deploy hashes (plaintext is not in git). Override with CMS_PHRASE /
- * DOOR_PHRASE when you rotate.
+ * Development only — see above. Plaintext is not in git, and 12 BIP39 words is
+ * far too much space to walk back from a hash, but these are still the phrases
+ * anyone with the repo can try, so production does not accept them.
  */
 const BUILTIN_HASHES = {
   cmsHash: "4d531d7e3fb30416c834395b770cb93abdd298a400b26d0dce8a887d51f52508",
