@@ -36,12 +36,18 @@ export const metadata: Metadata = {
     "no alcohol party",
     "September 27",
   ],
+  // No og:image / twitter card — sharing the URL should stay a plain link.
   openGraph: {
-    title: "UTOPIA — by AVION Productions",
-    description:
-      "A state of escape. Sunday 27 September, 12–5 PM at Ouzo Club and Kitchen, Hyderabad.",
+    title: "",
+    description: "",
     type: "website",
-    images: ["/media/poster.jpg"],
+    images: [],
+  },
+  twitter: {
+    card: "summary",
+    title: "",
+    description: "",
+    images: [],
   },
 };
 
