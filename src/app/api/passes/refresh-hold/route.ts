@@ -56,6 +56,12 @@ export async function POST(request: Request) {
   if (!order || order.buyer.email !== email) {
     return NextResponse.json({ error: "We couldn't find that reservation." }, { status: 404 });
   }
+  if (order.status === "expired") {
+    return NextResponse.json(
+      { error: "This hold ran out. Start again, or send us the UTR if you already paid." },
+      { status: 409 },
+    );
+  }
   if (order.status !== "reserved") {
     return NextResponse.json(
       { error: "This order is already decided. Check your email for the pass." },

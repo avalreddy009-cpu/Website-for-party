@@ -59,6 +59,18 @@ export const orderIntentSchema = buyerSchema
     }
   });
 
+/**
+ * Signed tokens are bounded by what we mint, so cap the field. Without a max,
+ * a megabyte of junk still gets base64-decoded and HMAC'd before it's rejected.
+ */
+export const verificationTokenSchema = z
+  .string()
+  .min(10, "Verify your email first")
+  .max(512, "That token isn't valid");
+
+/** Claim tokens carry the whole pass payload, so they run longer than the rest. */
+export const passClaimTokenSchema = z.string().min(10).max(8192);
+
 export const confirmCodeSchema = z.object({
   email: emailSchema,
   code: z
@@ -72,7 +84,7 @@ export const emailLoginSchema = z.object({
 });
 
 export const reserveSchema = orderIntentSchema.extend({
-  verificationToken: z.string().min(10, "Verify your email first"),
+  verificationToken: verificationTokenSchema,
 });
 
 export const phraseLoginSchema = z.object({
@@ -90,7 +102,7 @@ export const payProofSchema = z.object({
     .trim()
     .toUpperCase()
     .regex(/^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/, "That doesn't look like a reservation reference"),
-  verificationToken: z.string().min(10, "Verify your email first"),
+  verificationToken: verificationTokenSchema,
   utr: z
     .string()
     .trim()
@@ -128,7 +140,7 @@ export const refreshHoldSchema = z.object({
     .trim()
     .toUpperCase()
     .regex(/^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/, "That doesn't look like a reservation reference"),
-  verificationToken: z.string().min(10, "Verify your email first"),
+  verificationToken: verificationTokenSchema,
 });
 
 export const passPricesSchema = z.object({

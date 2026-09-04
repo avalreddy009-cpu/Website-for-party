@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { passClaimTokenSchema } from "@/lib/validation";
 import { BUYER_SESSION_COOKIE, cookieSecure } from "@/server/admin-auth";
 import { upsertPassWallet } from "@/server/pass-wallet";
 import { flushStore, hydrateStore, importWalletPass, signBuyerSession, verifyPassClaim } from "@/server/store";
@@ -24,8 +25,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Malformed request body." }, { status: 400 });
   }
 
-  const token = typeof body === "object" && body && "token" in body ? String(body.token) : "";
-  const claim = verifyPassClaim(token);
+  const token = passClaimTokenSchema.safeParse(
+    typeof body === "object" && body && "token" in body ? body.token : undefined,
+  );
+  const claim = token.success ? verifyPassClaim(token.data) : null;
   if (!claim) {
     return NextResponse.json({ error: "That pass link is invalid or expired." }, { status: 400 });
   }

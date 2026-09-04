@@ -362,7 +362,7 @@ async function persistRemote(): Promise<void> {
   }
 }
 
-export async function hydrateStore(): Promise<void> {
+async function pullRemote(): Promise<void> {
   const auth = upstashAuth();
   if (!auth) return;
   if (globalHydrate.__utopiaHydrate) {
@@ -386,6 +386,11 @@ export async function hydrateStore(): Promise<void> {
     }
   })();
   await globalHydrate.__utopiaHydrate;
+}
+
+export async function hydrateStore(): Promise<void> {
+  await pullRemote();
+  if (expireStaleHolds() > 0) persist();
 }
 
 export function getPassPrices(): { early: number; vip: number } {
@@ -415,6 +420,26 @@ export function setPassPrices(input: { early: number; vip: number }): {
 /** Has the buyer already sent us money for this hold? */
 function awaitingDecision(order: Order): boolean {
   return Boolean(order.utr || order.paidSubmittedAt || order.paymentProofData);
+}
+
+/**
+ * Close out holds nobody paid for. `OrderStatus` has carried "expired" from the
+ * start and the CMS draws the badge off `holdExpiresAt`, but nothing ever set
+ * the status — so the backend went on counting a month-old abandoned hold as
+ * pending, and repricing it on every price change.
+ *
+ * Proof arriving un-expires it; see `attachPaymentProof`. Someone actually
+ * sending money outranks a thirty-minute timer.
+ */
+function expireStaleHolds(now = Date.now()): number {
+  let expired = 0;
+  for (const order of Object.values(db.orders)) {
+    if (order.status !== "reserved" || awaitingDecision(order)) continue;
+    if (now <= order.holdExpiresAt) continue;
+    order.status = "expired";
+    expired += 1;
+  }
+  return expired;
 }
 
 /**
@@ -769,6 +794,9 @@ export function attachPaymentProof(
   if (!isJpegDataUrl(proof.proofData)) {
     return { ok: false, reason: "not-found" };
   }
+  // They paid late. Put the hold back in front of staff rather than telling
+  // someone who has already transferred money that they are too late.
+  if (order.status === "expired") order.status = "reserved";
   order.paidSubmittedAt = Date.now();
   order.utr = proof.utr;
   order.paymentRef = proof.utr;
