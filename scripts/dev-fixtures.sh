@@ -17,7 +17,7 @@ cd "$(dirname "$0")/.."
 # have to use the same key the server verifies with. Leaving this to the ambient
 # environment made a bad signature look like a pass, because the door fell
 # through to matching the six-digit code instead.
-export AUTH_SECRET="${AUTH_SECRET:-utopia-check-fixture-secret}"
+export AUTH_SECRET="${CHECK_AUTH_SECRET:-utopia-check-fixture-secret}"
 
 export CMS_PHRASE="${CMS_PHRASE:-abandon ability able about above absent absorb abstract absurd abuse access accident}"
 export DOOR_PHRASE="${DOOR_PHRASE:-account accuse achieve acid acoustic acquire across act action actor actress actual}"

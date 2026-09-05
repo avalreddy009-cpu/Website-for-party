@@ -9,9 +9,11 @@ REDIS="${REDIS:-http://127.0.0.1:8099}"
 CMS_PHRASE="${CMS_PHRASE:-abandon ability able about above absent absorb abstract absurd abuse access accident}"
 DOOR_PHRASE="${DOOR_PHRASE:-account accuse achieve acid acoustic acquire across act action actor actress actual}"
 
-# Must match what scripts/dev-fixtures.sh pins, or every signature we mint here
-# is rejected and the door quietly falls back to matching the six-digit code.
-AUTH_SECRET="${AUTH_SECRET:-utopia-check-fixture-secret}"
+# Ignore the ambient AUTH_SECRET. These scripts talk to the fixture server,
+# which pins this key. Using this shell's secret is how a real QR looks forged:
+# verify fails, the door falls through to the six-digit code, and a missing
+# order reads as NOT A PASS instead of no-record.
+AUTH_SECRET="${CHECK_AUTH_SECRET:-utopia-check-fixture-secret}"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 

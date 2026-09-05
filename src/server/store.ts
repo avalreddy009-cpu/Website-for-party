@@ -47,6 +47,7 @@ export type Order = {
   buyer: { name: string; email: string; phone: string };
   status: OrderStatus;
   createdAt: number;
+  updatedAt?: number;
   holdExpiresAt: number;
   paidAt?: number;
   paymentRef?: string;
@@ -322,6 +323,10 @@ function earliest(a?: number, b?: number): number | undefined {
   return Math.min(a, b);
 }
 
+function touch(order: Order): void {
+  order.updatedAt = Date.now();
+}
+
 /** Of two copies of the same order, the one that has travelled further. */
 function fresher(local: Order, remote: Order): Order {
   const byStatus = STATUS_RANK[remote.status] - STATUS_RANK[local.status];
@@ -331,6 +336,14 @@ function fresher(local: Order, remote: Order): Order {
   if (transfers(remote) !== transfers(local)) {
     return transfers(remote) > transfers(local) ? remote : local;
   }
+
+  // Equal status used to return remote unconditionally. Read-before-write then
+  // folded the last Redis snapshot over a hold we had just repriced, and the
+  // door/checkout saw the old total (or lost the proof) because nothing in
+  // latchOrder keeps money fields.
+  const localTs = local.updatedAt ?? local.createdAt ?? 0;
+  const remoteTs = remote.updatedAt ?? remote.createdAt ?? 0;
+  if (remoteTs !== localTs) return remoteTs > localTs ? remote : local;
   return remote;
 }
 
@@ -382,6 +395,7 @@ function latchOrder(base: Order, other: Order): Order {
       merged.hasPaymentProof ||
       other.hasPaymentProof,
   );
+  merged.updatedAt = Math.max(base.updatedAt ?? 0, other.updatedAt ?? 0) || undefined;
 
   return merged;
 }
@@ -636,6 +650,7 @@ function expireStaleHolds(now = Date.now()): number {
     if (order.status !== "reserved" || awaitingDecision(order)) continue;
     if (now <= order.holdExpiresAt) continue;
     order.status = "expired";
+    touch(order);
     expired += 1;
   }
   return expired;
@@ -660,6 +675,7 @@ function repriceHold(order: Order): boolean {
   order.fee = totals.fee;
   order.total = totals.total;
   order.lines = totals.lines;
+  touch(order);
   return true;
 }
 
@@ -912,6 +928,7 @@ export function createOrder(
     reference: reference(),
     status: "reserved",
     createdAt: now,
+    updatedAt: now,
     holdExpiresAt: now + holdMinutes * 60 * 1000,
   };
   db.orders[order.id] = order;
@@ -1004,6 +1021,7 @@ export function attachPaymentProof(
   order.paymentProofData = proof.proofData;
   order.hasPaymentProof = true;
   dirtyProofs.add(order.id);
+  touch(order);
   // Proof is in — don't expire the reservation after the old 30-minute hold.
   order.holdExpiresAt = Date.now() + 180 * 24 * 60 * 60 * 1000;
   persist();
@@ -1083,6 +1101,7 @@ export function approveOrder(id: string, decidedBy?: string): DecisionResult {
   order.paidAt = Date.now();
   order.decidedBy = decidedBy;
   mintPass(order);
+  touch(order);
   persist();
   return { ok: true, order };
 }
@@ -1099,6 +1118,7 @@ export function rejectOrder(id: string, reason?: string, decidedBy?: string): De
   order.rejectedAt = Date.now();
   order.rejectionReason = reason;
   order.decidedBy = decidedBy;
+  touch(order);
   persist();
   return { ok: true, order };
 }
@@ -1155,6 +1175,7 @@ export function transferOrder(
     order.revokedPassCodes = [...revoked].slice(-80);
   }
   mintPass(order);
+  touch(order);
   persist();
   return { ok: true, order, previousBuyer };
 }
@@ -1292,6 +1313,7 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
   };
   if (!Array.isArray(db.scans)) db.scans = [];
   db.scans.unshift(scan);
+  if (order && (result === "admitted" || result === "already-in")) touch(order);
   persist();
   return { result, order, ticket, scan };
 }
@@ -1418,6 +1440,7 @@ export function importWalletPass(pass: WalletPass): Order | null {
     buyer: { name: pass.name, email, phone: pass.phone },
     status: pass.status,
     createdAt: pass.createdAt,
+    updatedAt: Date.now(),
     holdExpiresAt: pass.createdAt + 30 * 60 * 1000,
     passCode: pass.passCode,
     qrToken: pass.qrToken,
