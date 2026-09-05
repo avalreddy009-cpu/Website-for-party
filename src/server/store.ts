@@ -24,6 +24,10 @@ getPhraseHashes();
  * Payment screenshots are stored on their own Redis keys. They used to ride
  * inside the one database blob, which is how a couple of 400KB JPEGs silently
  * exceeded Upstash's 1MB value limit and the next SET dropped every order.
+ *
+ * Staff removing a pass writes a tombstone to `utopia:purged:v1`. mergeRemote
+ * only unions orders, so without that key a lambda that still had the row
+ * would put it back on the next save.
  */
 
 export type OrderStatus = "reserved" | "paid" | "rejected" | "cancelled" | "expired";
@@ -121,14 +125,34 @@ type PassPriceState = {
   updatedAt: number;
 };
 
+/**
+ * Staff can delete a paid pass from CMS/door. Redis is one blob plus a
+ * separate tombstone key: `mergeRemote` only unions orders, so a lambda that
+ * still has the row in memory would otherwise write it back on the next save.
+ */
+type PurgedOrder = {
+  id: string;
+  reference?: string;
+  passCodes?: string[];
+  at: number;
+};
+
 type Db = {
   orders: Record<string, Order>;
   verifications: Record<string, Verification>;
   scans: ScanLog[];
   passPrices: PassPriceState;
+  purgedOrders: PurgedOrder[];
 };
 
 const DATA_FILE = join(process.cwd(), ".data", "utopia.json");
+const MAX_PURGED = 400;
+/**
+ * `obj["__proto__"] = value` reparents the object instead of adding a key, so a
+ * blob with that in it would poison every object in the process. JSON.parse
+ * happily produces such a key.
+ */
+const UNSAFE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 const CODE_TTL_MS = 10 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 45 * 1000;
 const SEND_WINDOW_MS = 30 * 60 * 1000;
@@ -150,8 +174,61 @@ function normalizePassPrices(value: unknown): PassPriceState {
   };
 }
 
+function asPurgedOrder(value: unknown): PurgedOrder | null {
+  if (!value || typeof value !== "object") return null;
+  const rec = value as Record<string, unknown>;
+  if (typeof rec.id !== "string" || UNSAFE_KEYS.has(rec.id)) return null;
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(rec.id)) return null;
+  const reference =
+    typeof rec.reference === "string" && /^UTP-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(rec.reference)
+      ? rec.reference
+      : undefined;
+  const passCodes = Array.isArray(rec.passCodes)
+    ? rec.passCodes
+        .filter((code): code is string => typeof code === "string" && /^\d{6}$/.test(code))
+        .slice(0, 40)
+    : [];
+  const at = typeof rec.at === "number" && Number.isFinite(rec.at) ? rec.at : 0;
+  return {
+    id: rec.id,
+    reference,
+    passCodes: passCodes.length > 0 ? passCodes : undefined,
+    at,
+  };
+}
+
+function normalizePurged(value: unknown): PurgedOrder[] {
+  if (!Array.isArray(value)) return [];
+  const byId = new Map<string, PurgedOrder>();
+  for (const item of value) {
+    const rec = asPurgedOrder(item);
+    if (!rec) continue;
+    const current = byId.get(rec.id);
+    if (!current) {
+      byId.set(rec.id, rec);
+      continue;
+    }
+    const codes = [
+      ...new Set([...(current.passCodes ?? []), ...(rec.passCodes ?? [])]),
+    ].slice(0, 40);
+    byId.set(rec.id, {
+      id: rec.id,
+      reference: current.reference ?? rec.reference,
+      passCodes: codes.length > 0 ? codes : undefined,
+      at: Math.max(current.at, rec.at),
+    });
+  }
+  return [...byId.values()].sort((a, b) => b.at - a.at).slice(0, MAX_PURGED);
+}
+
 function emptyDb(): Db {
-  return { orders: {}, verifications: {}, scans: [], passPrices: defaultPassPrices() };
+  return {
+    orders: {},
+    verifications: {},
+    scans: [],
+    passPrices: defaultPassPrices(),
+    purgedOrders: [],
+  };
 }
 
 function load(): Db {
@@ -163,6 +240,7 @@ function load(): Db {
         verifications: parsed.verifications ?? {},
         scans: Array.isArray(parsed.scans) ? parsed.scans : [],
         passPrices: normalizePassPrices(parsed.passPrices),
+        purgedOrders: normalizePurged(parsed.purgedOrders),
       };
     }
   } catch {
@@ -178,6 +256,7 @@ if (!db.orders) db.orders = {};
 if (!db.verifications) db.verifications = {};
 if (!Array.isArray(db.scans)) db.scans = [];
 if (!db.passPrices) db.passPrices = defaultPassPrices();
+if (!Array.isArray(db.purgedOrders)) db.purgedOrders = [];
 
 let persistWarned = false;
 
@@ -187,6 +266,7 @@ let lastRemoteWriteOk = true;
 let lastRemoteError: string | null = null;
 let hydrateRetryScheduled = false;
 const dirtyProofs = new Set<string>();
+const dirtyProofDeletes = new Set<string>();
 
 export const STORE_SAVE_FAILED =
   "Saved on this server, but Redis did not take it. The door will not see this pass. Check UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN on Vercel.";
@@ -264,6 +344,7 @@ export async function flushStoreForHttp(): Promise<{ ok: true } | { ok: false; e
 
 const UPSTASH_KEY = "utopia:db:v1";
 const PROOF_PREFIX = "utopia:proof:v1:";
+const PURGED_KEY = "utopia:purged:v1";
 const globalHydrate = globalThis as typeof globalThis & {
   __utopiaHydrate?: Promise<void>;
 };
@@ -278,13 +359,6 @@ function upstashAuth(): { url: string; token: string } | null {
 function proofKey(orderId: string): string {
   return `${PROOF_PREFIX}${orderId}`;
 }
-
-/**
- * `obj["__proto__"] = value` reparents the object instead of adding a key, so a
- * blob with that in it would poison every object in the process. JSON.parse
- * happily produces such a key.
- */
-const UNSAFE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 
 function orderForSnapshot(order: Order): Order {
   const copy: Order = { ...order };
@@ -306,7 +380,79 @@ function snapshotDb(): Db {
     verifications: db.verifications,
     scans: db.scans,
     passPrices: db.passPrices,
+    purgedOrders: db.purgedOrders,
   };
+}
+
+function mergePurged(incoming: unknown): void {
+  db.purgedOrders = normalizePurged([...(db.purgedOrders ?? []), ...(Array.isArray(incoming) ? incoming : [])]);
+}
+
+function passCodesFor(order: Order): string[] {
+  return [
+    ...(order.passCode ? [order.passCode] : []),
+    ...(order.tickets?.map((ticket) => ticket.passCode) ?? []),
+  ].filter(Boolean);
+}
+
+function rememberPurged(order: { id: string; reference?: string; passCodes?: string[] }): void {
+  mergePurged([
+    {
+      id: order.id,
+      reference: order.reference,
+      passCodes: order.passCodes?.length ? order.passCodes : undefined,
+      at: Date.now(),
+    },
+  ]);
+}
+
+function isPurged(id?: string, reference?: string): boolean {
+  if (!id && !reference) return false;
+  return db.purgedOrders.some(
+    (item) => (id && item.id === id) || (reference && item.reference && item.reference === reference),
+  );
+}
+
+function applyPurges(): void {
+  if (!Array.isArray(db.purgedOrders) || db.purgedOrders.length === 0) return;
+
+  const ids = new Set<string>();
+  const refs = new Set<string>();
+  const codes = new Set<string>();
+  for (const rec of db.purgedOrders) {
+    ids.add(rec.id);
+    if (rec.reference) refs.add(rec.reference);
+    for (const code of rec.passCodes ?? []) codes.add(code);
+  }
+
+  for (const rec of db.purgedOrders) {
+    const order = getOrderById(rec.id) ?? (rec.reference ? getOrderByReference(rec.reference) : undefined);
+    if (!order) continue;
+    ids.add(order.id);
+    if (order.reference) refs.add(order.reference);
+    for (const code of passCodesFor(order)) codes.add(code);
+    delete db.orders[order.id];
+    dirtyProofs.delete(order.id);
+    dirtyProofDeletes.add(order.id);
+  }
+
+  db.scans = db.scans.filter((scan) => {
+    if (scan.orderId && ids.has(scan.orderId)) return false;
+    if (scan.reference && refs.has(scan.reference)) return false;
+    if (scan.passCode && codes.has(scan.passCode)) return false;
+    return true;
+  });
+}
+
+function forgetOrder(order: Order): void {
+  rememberPurged({
+    id: order.id,
+    reference: order.reference,
+    passCodes: passCodesFor(order),
+  });
+  dirtyProofs.delete(order.id);
+  dirtyProofDeletes.add(order.id);
+  applyPurges();
 }
 
 const STATUS_RANK: Record<OrderStatus, number> = {
@@ -403,6 +549,7 @@ function latchOrder(base: Order, other: Order): Order {
 function mergeRemote(remote: Partial<Db>): void {
   for (const [id, incoming] of Object.entries(remote.orders ?? {})) {
     if (UNSAFE_KEYS.has(id)) continue;
+    if (isPurged(id, incoming.reference)) continue;
     const current = getOrderById(id);
     if (!current) {
       db.orders[id] = incoming;
@@ -450,6 +597,8 @@ function mergeRemote(remote: Partial<Db>): void {
       db.passPrices = incoming;
     }
   }
+  if (remote.purgedOrders) mergePurged(remote.purgedOrders);
+  applyPurges();
 }
 
 type UpstashReply = { result?: unknown; error?: string };
@@ -495,6 +644,19 @@ async function fetchRemote(auth: { url: string; token: string }): Promise<void> 
   if (typeof payload.result === "string" && payload.result) {
     mergeRemote(JSON.parse(payload.result) as Partial<Db>);
   }
+  try {
+    const purgedRes = await fetch(`${auth.url}/get/${encodeURIComponent(PURGED_KEY)}`, {
+      headers: { Authorization: `Bearer ${auth.token}` },
+      cache: "no-store",
+    });
+    const purgedPayload = await upstashJson(purgedRes, "Upstash GET purged");
+    if (typeof purgedPayload.result === "string" && purgedPayload.result) {
+      mergePurged(JSON.parse(purgedPayload.result));
+    }
+  } catch (error) {
+    console.error("[utopia] purged-id read failed", error);
+  }
+  applyPurges();
 }
 
 async function persistDirtyProofs(auth: { url: string; token: string }): Promise<void> {
@@ -511,6 +673,18 @@ async function persistDirtyProofs(auth: { url: string; token: string }): Promise
     }
     await upstashCommand(auth, ["SET", proofKey(id), order.paymentProofData]);
     dirtyProofs.delete(id);
+  }
+}
+
+async function persistProofDeletes(auth: { url: string; token: string }): Promise<void> {
+  const ids = [...dirtyProofDeletes];
+  for (const id of ids) {
+    if (UNSAFE_KEYS.has(id)) {
+      dirtyProofDeletes.delete(id);
+      continue;
+    }
+    await upstashCommand(auth, ["DEL", proofKey(id)]);
+    dirtyProofDeletes.delete(id);
   }
 }
 
@@ -534,6 +708,7 @@ async function persistRemote(): Promise<void> {
       // Proofs first so a CMS on another instance can still open the screenshot
       // even if the metadata SET below is the one that fails.
       await persistDirtyProofs(auth);
+      await persistProofDeletes(auth);
 
       // The SET below replaces the entire database, so anything another instance
       // wrote since our last read would simply cease to exist — including a whole
@@ -542,8 +717,13 @@ async function persistRemote(): Promise<void> {
       // have never seen and latches the fields that must not go backwards.
       //
       // Two instances can still interleave inside this window. Closing it properly
-      // needs a compare-and-set, which means giving each order its own key instead
+      // needs a compare-and-swap, which means giving each order its own key instead
       // of one blob.
+      //
+      // Deleting a row is the exception to the union: mergeRemote would put a
+      // purged order back if another lambda still had it. Tombstones live on
+      // their own Redis key so an older build that rewrites the blob cannot
+      // erase the fact that staff removed the pass.
       try {
         await fetchRemote(auth);
       } catch (error) {
@@ -551,12 +731,16 @@ async function persistRemote(): Promise<void> {
         // were asked to save. Losing a staff decision is worse, so we go ahead.
         console.error("[utopia] read-before-write failed, writing anyway", error);
       }
+      applyPurges();
 
       const blob = JSON.stringify(snapshotDb());
       if (blob.includes("data:image/jpeg")) {
         throw new Error("snapshot still contains payment proof blobs");
       }
       await upstashCommand(auth, ["SET", UPSTASH_KEY, blob]);
+      if (db.purgedOrders.length > 0) {
+        await upstashCommand(auth, ["SET", PURGED_KEY, JSON.stringify(db.purgedOrders)]);
+      }
       markRemoteWriteOk();
       return;
     } catch (error) {
@@ -593,6 +777,7 @@ async function pullRemote(): Promise<void> {
 
 export async function hydrateStore(): Promise<void> {
   await pullRemote();
+  applyPurges();
   if (expireStaleHolds() > 0) persist();
   // An approval that got a 503 left the paid order in this instance's memory.
   // The next staff or door request pushes it again instead of waiting for
@@ -1134,7 +1319,25 @@ export function discardOpenHold(id: string): DecisionResult {
     return { ok: false, reason: "already-decided" };
   }
   if (awaitingDecision(order)) return { ok: false, reason: "already-decided" };
-  delete db.orders[id];
+  forgetOrder(order);
+  persist();
+  return { ok: true, order };
+}
+
+/**
+ * Take a pass off CMS and the door. Paid, scanned, rejected — all of them.
+ * A tombstone stops another instance writing the row back from memory.
+ */
+export function purgeOrder(id: string): { ok: true; order?: Order } {
+  const order = getOrderById(id);
+  if (order) {
+    forgetOrder(order);
+  } else {
+    rememberPurged({ id });
+    dirtyProofs.delete(id);
+    dirtyProofDeletes.add(id);
+    applyPurges();
+  }
   persist();
   return { ok: true, order };
 }
@@ -1422,6 +1625,8 @@ export function verifyPassClaim(token: string): WalletPass | null {
 
 export function importWalletPass(pass: WalletPass): Order | null {
   const email = pass.email.trim().toLowerCase();
+  if (isPurged(pass.id, pass.reference)) return null;
+
   const existing =
     getOrderById(pass.id) ??
     getOrderByReference(pass.reference) ??

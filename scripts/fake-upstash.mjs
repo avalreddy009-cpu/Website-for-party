@@ -3,7 +3,7 @@
  * the multi-instance merge can be exercised locally. Test-only.
  *
  *   GET  /get/<key>   -> { result: string | null }
- *   POST /            -> ["SET", key, value]
+ *   POST /            -> ["SET", key, value] | ["DEL", key] | ["GET", key]
  *
  * Plus two hooks the test driver uses to play the part of a second instance:
  *
@@ -43,6 +43,13 @@ createServer(async (req, res) => {
   }
   if (req.method === "POST" && url.pathname === "/") {
     const [command, key, value] = JSON.parse(await body(req));
+    if (command === "GET") {
+      return json(res, 200, { result: store.get(key) ?? null });
+    }
+    if (command === "DEL") {
+      const existed = store.delete(key);
+      return json(res, 200, { result: existed ? 1 : 0 });
+    }
     if (command !== "SET") return json(res, 400, { error: `unsupported: ${command}` });
     if (typeof value === "string" && Buffer.byteLength(value) > 1_000_000) {
       return json(res, 400, { error: "ERR max request size exceeded" });

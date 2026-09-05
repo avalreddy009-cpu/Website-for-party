@@ -51,6 +51,7 @@ export default function AdminDashboard() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [transferringId, setTransferringId] = useState<string | null>(null);
+  const [purgingId, setPurgingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [transfer, setTransfer] = useState({ name: "", email: "", phone: "" });
   const [proof, setProof] = useState<{ src: string; name?: string } | null>(null);
@@ -157,6 +158,25 @@ export default function AdminDashboard() {
         return;
       }
       setOrders((prev) => (prev ? prev.filter((order) => order.id !== id) : prev));
+      void load();
+    } catch {
+      setError("No connection. Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removePass = async (id: string) => {
+    setBusyId(id);
+    try {
+      const response = await fetch(`/api/admin/orders/${id}/purge`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "Couldn't remove that pass.");
+        return;
+      }
+      setOrders((prev) => (prev ? prev.filter((order) => order.id !== id) : prev));
+      setPurgingId(null);
       void load();
     } catch {
       setError("No connection. Try again.");
@@ -277,6 +297,7 @@ export default function AdminDashboard() {
             busy={busyId === order.id}
             rejecting={rejectingId === order.id}
             transferring={transferringId === order.id}
+            purging={purgingId === order.id}
             reason={reason}
             transfer={transfer}
             onReasonChange={setReason}
@@ -285,6 +306,7 @@ export default function AdminDashboard() {
             onStartReject={() => {
               setRejectingId(order.id);
               setTransferringId(null);
+              setPurgingId(null);
               setReason("");
             }}
             onCancelReject={() => {
@@ -295,6 +317,7 @@ export default function AdminDashboard() {
             onStartTransfer={() => {
               setTransferringId(order.id);
               setRejectingId(null);
+              setPurgingId(null);
               setTransfer({
                 name: order.buyer.name,
                 email: order.buyer.email,
@@ -303,6 +326,13 @@ export default function AdminDashboard() {
             }}
             onCancelTransfer={() => setTransferringId(null)}
             onConfirmTransfer={() => void movePass(order.id)}
+            onStartPurge={() => {
+              setPurgingId(order.id);
+              setRejectingId(null);
+              setTransferringId(null);
+            }}
+            onCancelPurge={() => setPurgingId(null)}
+            onConfirmPurge={() => void removePass(order.id)}
             onDropHold={
               order.status === "reserved" &&
               !order.paidSubmittedAt &&
@@ -413,6 +443,7 @@ type OrderRowProps = {
   busy: boolean;
   rejecting: boolean;
   transferring: boolean;
+  purging: boolean;
   reason: string;
   transfer: { name: string; email: string; phone: string };
   onReasonChange: (value: string) => void;
@@ -424,6 +455,9 @@ type OrderRowProps = {
   onStartTransfer: () => void;
   onCancelTransfer: () => void;
   onConfirmTransfer: () => void;
+  onStartPurge: () => void;
+  onCancelPurge: () => void;
+  onConfirmPurge: () => void;
   onDropHold?: () => void;
   onViewProof?: () => void;
 };
@@ -435,6 +469,7 @@ function OrderRow({
   busy,
   rejecting,
   transferring,
+  purging,
   reason,
   transfer,
   onReasonChange,
@@ -446,6 +481,9 @@ function OrderRow({
   onStartTransfer,
   onCancelTransfer,
   onConfirmTransfer,
+  onStartPurge,
+  onCancelPurge,
+  onConfirmPurge,
   onDropHold,
   onViewProof,
 }: OrderRowProps) {
@@ -560,7 +598,7 @@ function OrderRow({
             {formatPrice(order.total)}
           </p>
 
-          {order.status === "paid" && !anyEntered && !transferring && (
+          {order.status === "paid" && !anyEntered && !transferring && !purging && (
             <button
               type="button"
               onClick={onStartTransfer}
@@ -569,6 +607,18 @@ function OrderRow({
             >
               <ArrowRightLeft className="size-3" />
               TRANSFER
+            </button>
+          )}
+
+          {order.status === "paid" && !purging && !transferring && (
+            <button
+              type="button"
+              onClick={onStartPurge}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-full border border-white/12 px-3.5 py-2 font-mono text-[9px] tracking-[0.18em] text-bone/55 uppercase transition-all duration-300 hover:border-signal/50 hover:text-signal-soft disabled:opacity-40"
+            >
+              <X className="size-3" />
+              REMOVE
             </button>
           )}
 
@@ -715,6 +765,43 @@ function OrderRow({
                 >
                   {busy && <Loader2 className="size-3 animate-spin" />}
                   CONFIRM TRANSFER
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {purging && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.35, ease: EASE }}
+            className="overflow-hidden"
+          >
+            <div className="mt-4 flex flex-col gap-3 border-t border-white/8 pt-4 sm:flex-row sm:items-center">
+              <p className="flex-1 text-[13px] leading-relaxed text-bone/60">
+                Takes this pass off CMS and the door. Their QR scans as no record.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onCancelPurge}
+                  disabled={busy}
+                  className="rounded-full border border-white/12 px-3.5 py-2 font-mono text-[9px] tracking-[0.18em] text-bone/55 uppercase transition-colors hover:text-bone disabled:opacity-40"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={onConfirmPurge}
+                  disabled={busy}
+                  className="flex items-center gap-1.5 rounded-full bg-signal px-4 py-2 font-mono text-[9px] font-bold tracking-[0.18em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] disabled:scale-100 disabled:opacity-60"
+                >
+                  {busy && <Loader2 className="size-3 animate-spin" />}
+                  CONFIRM REMOVE
                 </button>
               </div>
             </div>
