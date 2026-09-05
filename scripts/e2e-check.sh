@@ -56,9 +56,16 @@ FROZEN=$(post /api/passes/refresh-hold "{\"email\":\"$EMAIL\",\"reference\":\"$R
 echo "   total after proof + a price hike to 9999: $FROZEN"
 [ "$FROZEN" = "5000" ] || fail "a hold with proof on it was repriced to $FROZEN"
 
-echo "== screenshot lives on its own redis key until staff decide"
+echo "== approve, and check what the cms is handed"
 ORDER_ID=$(order_field "$CMS_JAR" "$REF" id)
 [ -n "$ORDER_ID" ] || fail "order missing from the CMS list"
+APPROVED=$(post "/api/admin/orders/$ORDER_ID/approve" '{}' -b "$CMS_JAR")
+echo "   status=$(echo "$APPROVED" | pick order.status) tickets=$(echo "$APPROVED" | pick order.tickets | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).length))')"
+[ -z "$(echo "$APPROVED" | pick order.qrToken)" ] || fail "the QR HMAC leaked into the CMS payload"
+[ -z "$(echo "$APPROVED" | pick order.paymentProofData)" ] || fail "the proof blob leaked into the CMS payload"
+echo "   no qrToken, no proof blob"
+
+echo "== redis keeps the pass, and the screenshot on its own key"
 curl -s "$REDIS/__dump" | node -e '
 let s="";
 process.stdin.on("data",d=>s+=d).on("end",()=>{
@@ -68,10 +75,11 @@ process.stdin.on("data",d=>s+=d).on("end",()=>{
   if (value.includes("data:image/jpeg")) { console.error("payment proof is still inside the shared blob"); process.exit(1) }
   const db = JSON.parse(value);
   const order = Object.values(db.orders).find(o => o.id === process.argv[1]);
-  if (!order) { console.error("pending order missing from redis"); process.exit(1) }
+  if (!order) { console.error("approved order missing from redis"); process.exit(1) }
   if (order.paymentProofData) { console.error("order still carries paymentProofData"); process.exit(1) }
   if (!order.hasPaymentProof) { console.error("hasPaymentProof was not latched"); process.exit(1) }
-  console.log("   blob has pending order, no jpeg");
+  if (order.status !== "paid") { console.error("order status in redis is " + order.status); process.exit(1) }
+  console.log("   blob has paid order, no jpeg");
 })' "$ORDER_ID"
 PROOF_KEY=$(node -e 'console.log(encodeURIComponent("utopia:proof:v1:"+process.argv[1]))' "$ORDER_ID")
 PROOF_SRC=$(curl -s "$REDIS/get/$PROOF_KEY" | pick result)
@@ -79,33 +87,6 @@ echo "   proof key starts $(echo "$PROOF_SRC" | cut -c1-22)"
 [ "${PROOF_SRC#data:image/jpeg}" != "$PROOF_SRC" ] || fail "screenshot was not stored on its own redis key"
 CMS_PROOF=$(curl -s "$BASE/api/admin/orders/$ORDER_ID/proof" -b "$CMS_JAR" | pick src)
 [ "${CMS_PROOF#data:image/jpeg}" != "$CMS_PROOF" ] || fail "CMS proof route could not read the screenshot"
-
-echo "== approve, and check what the cms is handed"
-APPROVED=$(post "/api/admin/orders/$ORDER_ID/approve" '{}' -b "$CMS_JAR")
-echo "   status=$(echo "$APPROVED" | pick order.status) tickets=$(echo "$APPROVED" | pick order.tickets | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).length))')"
-[ -z "$(echo "$APPROVED" | pick order.qrToken)" ] || fail "the QR HMAC leaked into the CMS payload"
-[ -z "$(echo "$APPROVED" | pick order.paymentProofData)" ] || fail "the proof blob leaked into the CMS payload"
-echo "   no qrToken, no proof blob"
-
-echo "== redis keeps the pass, drops the screenshot"
-curl -s "$REDIS/__dump" | node -e '
-let s="";
-process.stdin.on("data",d=>s+=d).on("end",()=>{
-  const wrap = JSON.parse(s);
-  const value = wrap.value;
-  const db = JSON.parse(value);
-  const order = Object.values(db.orders).find(o => o.id === process.argv[1]);
-  if (!order) { console.error("approved order missing from redis"); process.exit(1) }
-  if (order.paymentProofData) { console.error("order still carries paymentProofData"); process.exit(1) }
-  if (!order.hasPaymentProof) { console.error("hasPaymentProof was not latched"); process.exit(1) }
-  if (order.status !== "paid") { console.error("order status in redis is " + order.status); process.exit(1) }
-  console.log("   blob has paid order, no jpeg");
-})' "$ORDER_ID"
-PROOF_GONE=$(curl -s "$REDIS/get/$PROOF_KEY" | pick result)
-[ -z "$PROOF_GONE" ] || fail "screenshot key should be gone after approve"
-CMS_GONE=$(curl -s "$BASE/api/admin/orders/$ORDER_ID/proof" -b "$CMS_JAR" | pick error)
-echo "   cms proof after approve: ${CMS_GONE:-missing error}"
-[ -n "$CMS_GONE" ] || fail "CMS should not keep the screenshot after approve"
 
 echo "== double approve is refused"
 echo "   $(post "/api/admin/orders/$ORDER_ID/approve" '{}' -b "$CMS_JAR" | pick error)"
