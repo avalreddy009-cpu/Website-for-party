@@ -4,7 +4,7 @@ import { fieldErrors, orderIdSchema, transferOrderSchema } from "@/lib/validatio
 import { getAdminSession } from "@/server/admin-session";
 import { sendPassApproved, sendPassTransferredAway } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { flushStore, hydrateStore, toStaffOrder, transferOrder } from "@/server/store";
+import { flushStoreForHttp, hydrateStore, toStaffOrder, transferOrder } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -86,6 +86,7 @@ export async function POST(
     console.error("[utopia] transfer pass email failed", error);
   }
 
-  await flushStore();
+  const saved = await flushStoreForHttp();
+  if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 503 });
   return NextResponse.json({ ok: true, order: toStaffOrder(result.order) });
 }

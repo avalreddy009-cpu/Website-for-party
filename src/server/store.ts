@@ -16,13 +16,14 @@ import { getAuthSecret } from "./secret";
 getPhraseHashes();
 
 /**
- * Deliberately small persistence layer. Everything the app needs goes through
- * this module, so swapping the JSON file for Postgres/Redis later means
- * rewriting one file and nothing else.
+ * Persistence for a serverless host. The JSON file is a local cache. The real
+ * copy of the database is Redis (Upstash REST). Without those env vars, each
+ * Vercel instance has its own memory, CMS approvals never reach the door, and
+ * a paid pass scans as NOT A PASS.
  *
- * Writes are best-effort: on a read-only filesystem (most serverless hosts)
- * this degrades to in-process memory, which is fine for a single node but is
- * the first thing to replace before real traffic.
+ * Payment screenshots are stored on their own Redis keys. They used to ride
+ * inside the one database blob, which is how a couple of 400KB JPEGs silently
+ * exceeded Upstash's 1MB value limit and the next SET dropped every order.
  */
 
 export type OrderStatus = "reserved" | "paid" | "rejected" | "cancelled" | "expired";
@@ -78,7 +79,14 @@ export type PassTicket = {
   enteredAt?: number;
 };
 
-export type ScanResult = "admitted" | "already-in" | "invalid" | "unpaid" | "rejected";
+export type ScanResult =
+  | "admitted"
+  | "already-in"
+  | "invalid"
+  | "unpaid"
+  | "rejected"
+  /** Signed by us, but the order is not in the database. Our problem, not theirs. */
+  | "no-record";
 
 export type ScanLog = {
   id: string;
@@ -173,6 +181,52 @@ if (!db.passPrices) db.passPrices = defaultPassPrices();
 let persistWarned = false;
 
 let flushPromise: Promise<void> = Promise.resolve();
+let lastHydrateOk = true;
+let lastRemoteWriteOk = true;
+let lastRemoteError: string | null = null;
+let hydrateRetryScheduled = false;
+const dirtyProofs = new Set<string>();
+
+export const STORE_SAVE_FAILED =
+  "Saved on this server, but Redis did not take it. The door will not see this pass. Check UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN on Vercel.";
+
+export type StoreHealth = {
+  durable: boolean;
+  hydrateOk: boolean;
+  writeOk: boolean;
+  detail: string;
+};
+
+export function getStoreHealth(): StoreHealth {
+  if (!upstashAuth()) {
+    return {
+      durable: false,
+      hydrateOk: false,
+      writeOk: false,
+      detail:
+        "No Redis. Orders live only in this server instance — CMS approvals will not reach the door. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN on Vercel.",
+    };
+  }
+  if (!lastHydrateOk) {
+    return {
+      durable: true,
+      hydrateOk: false,
+      writeOk: lastRemoteWriteOk,
+      detail:
+        lastRemoteError ??
+        "Redis is set but the last read failed. The door and CMS may be looking at different copies.",
+    };
+  }
+  if (!lastRemoteWriteOk) {
+    return {
+      durable: true,
+      hydrateOk: true,
+      writeOk: false,
+      detail: lastRemoteError ?? STORE_SAVE_FAILED,
+    };
+  }
+  return { durable: true, hydrateOk: true, writeOk: true, detail: "" };
+}
 
 function persist(): void {
   try {
@@ -182,18 +236,33 @@ function persist(): void {
     if (!persistWarned) {
       persistWarned = true;
       console.warn(
-        "[utopia] Filesystem is read-only — orders live in memory on this instance. Set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN so MY PASSES and the door see CMS approvals.",
+        "[utopia] Filesystem is read-only — durable state is Redis. Set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN so MY PASSES and the door see CMS approvals.",
       );
     }
   }
-  flushPromise = persistRemote();
+  // Chain, don't replace: a second persist() while the first write is in
+  // flight used to drop the first promise, so flushStore could resolve
+  // before the approval that triggered it had actually been saved.
+  flushPromise = flushPromise.then(persistRemote, persistRemote);
 }
 
 export async function flushStore(): Promise<void> {
   await flushPromise;
 }
 
+/** HTTP handlers: fail the request if Redis refused the write. */
+export async function flushStoreForHttp(): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await flushStore();
+    return { ok: true };
+  } catch (error) {
+    console.error("[utopia] store flush failed", error);
+    return { ok: false, error: STORE_SAVE_FAILED };
+  }
+}
+
 const UPSTASH_KEY = "utopia:db:v1";
+const PROOF_PREFIX = "utopia:proof:v1:";
 const globalHydrate = globalThis as typeof globalThis & {
   __utopiaHydrate?: Promise<void>;
 };
@@ -205,9 +274,34 @@ function upstashAuth(): { url: string; token: string } | null {
   return { url, token };
 }
 
+function proofKey(orderId: string): string {
+  return `${PROOF_PREFIX}${orderId}`;
+}
+
+/**
+ * `obj["__proto__"] = value` reparents the object instead of adding a key, so a
+ * blob with that in it would poison every object in the process. JSON.parse
+ * happily produces such a key.
+ */
+const UNSAFE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
+
+function orderForSnapshot(order: Order): Order {
+  const copy: Order = { ...order };
+  if (copy.paymentProofData) {
+    copy.hasPaymentProof = true;
+    delete copy.paymentProofData;
+  }
+  return copy;
+}
+
 function snapshotDb(): Db {
+  const orders: Record<string, Order> = {};
+  for (const [id, order] of Object.entries(db.orders)) {
+    if (UNSAFE_KEYS.has(id)) continue;
+    orders[id] = orderForSnapshot(order);
+  }
   return {
-    orders: db.orders,
+    orders,
     verifications: db.verifications,
     scans: db.scans,
     passPrices: db.passPrices,
@@ -282,16 +376,15 @@ function latchOrder(base: Order, other: Order): Order {
   merged.paidSubmittedAt = earliest(base.paidSubmittedAt, other.paidSubmittedAt);
   merged.utr ??= other.utr;
   merged.paymentRef ??= other.paymentRef;
+  merged.hasPaymentProof = Boolean(
+    merged.paymentProofData ||
+      other.paymentProofData ||
+      merged.hasPaymentProof ||
+      other.hasPaymentProof,
+  );
 
   return merged;
 }
-
-/**
- * `obj["__proto__"] = value` reparents the object instead of adding a key, so a
- * blob with that in it would poison every object in the process. JSON.parse
- * happily produces such a key.
- */
-const UNSAFE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 
 function mergeRemote(remote: Partial<Db>): void {
   for (const [id, incoming] of Object.entries(remote.orders ?? {})) {
@@ -345,21 +438,121 @@ function mergeRemote(remote: Partial<Db>): void {
   }
 }
 
+type UpstashReply = { result?: unknown; error?: string };
+
+async function upstashJson(
+  response: Response,
+  what: string,
+): Promise<UpstashReply> {
+  let payload: UpstashReply = {};
+  try {
+    payload = (await response.json()) as UpstashReply;
+  } catch {
+    // Non-JSON error page.
+  }
+  if (!response.ok || payload.error) {
+    throw new Error(payload.error ?? `${what} HTTP ${response.status}`);
+  }
+  return payload;
+}
+
+async function upstashCommand(
+  auth: { url: string; token: string },
+  command: unknown[],
+): Promise<unknown> {
+  const response = await fetch(auth.url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${auth.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(command),
+  });
+  const payload = await upstashJson(response, `Upstash ${String(command[0])}`);
+  return payload.result;
+}
+
+async function fetchRemote(auth: { url: string; token: string }): Promise<void> {
+  const response = await fetch(`${auth.url}/get/${encodeURIComponent(UPSTASH_KEY)}`, {
+    headers: { Authorization: `Bearer ${auth.token}` },
+    cache: "no-store",
+  });
+  const payload = await upstashJson(response, "Upstash GET");
+  if (typeof payload.result === "string" && payload.result) {
+    mergeRemote(JSON.parse(payload.result) as Partial<Db>);
+  }
+}
+
+async function persistDirtyProofs(auth: { url: string; token: string }): Promise<void> {
+  const ids = [...dirtyProofs];
+  for (const id of ids) {
+    if (UNSAFE_KEYS.has(id)) {
+      dirtyProofs.delete(id);
+      continue;
+    }
+    const order = getOrderById(id);
+    if (!order?.paymentProofData) {
+      dirtyProofs.delete(id);
+      continue;
+    }
+    await upstashCommand(auth, ["SET", proofKey(id), order.paymentProofData]);
+    dirtyProofs.delete(id);
+  }
+}
+
+function markRemoteWriteOk(): void {
+  lastRemoteWriteOk = true;
+  lastRemoteError = null;
+}
+
+function markRemoteWriteFailed(error: unknown): void {
+  lastRemoteWriteOk = false;
+  lastRemoteError = error instanceof Error ? error.message : STORE_SAVE_FAILED;
+}
+
 async function persistRemote(): Promise<void> {
   const auth = upstashAuth();
   if (!auth) return;
-  try {
-    await fetch(auth.url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${auth.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(["SET", UPSTASH_KEY, JSON.stringify(snapshotDb())]),
-    });
-  } catch (error) {
-    console.error("[utopia] remote store write failed", error);
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      // Proofs first so a CMS on another instance can still open the screenshot
+      // even if the metadata SET below is the one that fails.
+      await persistDirtyProofs(auth);
+
+      // The SET below replaces the entire database, so anything another instance
+      // wrote since our last read would simply cease to exist — including a whole
+      // order somebody just paid for, which then reads as a forgery at the door.
+      // Fold the current remote state in first: mergeRemote is a union for rows we
+      // have never seen and latches the fields that must not go backwards.
+      //
+      // Two instances can still interleave inside this window. Closing it properly
+      // needs a compare-and-set, which means giving each order its own key instead
+      // of one blob.
+      try {
+        await fetchRemote(auth);
+      } catch (error) {
+        // Writing on a failed read risks a clobber; not writing loses whatever we
+        // were asked to save. Losing a staff decision is worse, so we go ahead.
+        console.error("[utopia] read-before-write failed, writing anyway", error);
+      }
+
+      const blob = JSON.stringify(snapshotDb());
+      if (blob.includes("data:image/jpeg")) {
+        throw new Error("snapshot still contains payment proof blobs");
+      }
+      await upstashCommand(auth, ["SET", UPSTASH_KEY, blob]);
+      markRemoteWriteOk();
+      return;
+    } catch (error) {
+      lastError = error;
+      console.error("[utopia] remote store write failed", error);
+    }
   }
+
+  markRemoteWriteFailed(lastError);
+  throw lastError instanceof Error ? lastError : new Error(STORE_SAVE_FAILED);
 }
 
 async function pullRemote(): Promise<void> {
@@ -371,15 +564,11 @@ async function pullRemote(): Promise<void> {
   }
   globalHydrate.__utopiaHydrate = (async () => {
     try {
-      const response = await fetch(`${auth.url}/get/${encodeURIComponent(UPSTASH_KEY)}`, {
-        headers: { Authorization: `Bearer ${auth.token}` },
-        cache: "no-store",
-      });
-      const payload = (await response.json()) as { result?: string | null };
-      if (payload.result) {
-        mergeRemote(JSON.parse(payload.result) as Partial<Db>);
-      }
+      await fetchRemote(auth);
+      lastHydrateOk = true;
     } catch (error) {
+      lastHydrateOk = false;
+      lastRemoteError = error instanceof Error ? error.message : "Redis read failed";
       console.error("[utopia] remote store read failed", error);
     } finally {
       globalHydrate.__utopiaHydrate = undefined;
@@ -391,6 +580,16 @@ async function pullRemote(): Promise<void> {
 export async function hydrateStore(): Promise<void> {
   await pullRemote();
   if (expireStaleHolds() > 0) persist();
+  // An approval that got a 503 left the paid order in this instance's memory.
+  // The next staff or door request pushes it again instead of waiting for
+  // someone to click Approve on an order that is already paid.
+  if (upstashAuth() && !lastRemoteWriteOk && !hydrateRetryScheduled) {
+    hydrateRetryScheduled = true;
+    persist();
+    void flushPromise.finally(() => {
+      hydrateRetryScheduled = false;
+    });
+  }
 }
 
 export function getPassPrices(): { early: number; vip: number } {
@@ -419,7 +618,7 @@ export function setPassPrices(input: { early: number; vip: number }): {
 
 /** Has the buyer already sent us money for this hold? */
 function awaitingDecision(order: Order): boolean {
-  return Boolean(order.utr || order.paidSubmittedAt || order.paymentProofData);
+  return Boolean(order.utr || order.paidSubmittedAt || order.paymentProofData || order.hasPaymentProof);
 }
 
 /**
@@ -803,6 +1002,8 @@ export function attachPaymentProof(
   order.paymentProofName = proof.proofName;
   order.paymentProofMime = proof.proofMime;
   order.paymentProofData = proof.proofData;
+  order.hasPaymentProof = true;
+  dirtyProofs.add(order.id);
   // Proof is in — don't expire the reservation after the old 30-minute hold.
   order.holdExpiresAt = Date.now() + 180 * 24 * 60 * 60 * 1000;
   persist();
@@ -981,10 +1182,15 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
   const parsed = parseScanPayload(raw);
   let order: Order | undefined;
   let ticket: PassTicket | undefined;
+  // Set when the payload carries our own signature, whether or not we can find
+  // what it points at. Only we can produce one, and we only mint them for
+  // orders that have been approved.
+  let signed: { orderId: string; passCode: string } | undefined;
 
   if (parsed.token) {
     const decoded = verifyPassToken(parsed.token);
     if (decoded) {
+      signed = decoded;
       const candidate = getOrderById(decoded.orderId);
       if (candidate) {
         const match = ticketsForOrder(candidate).find(
@@ -1032,7 +1238,10 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
 
   let result: ScanResult = "invalid";
   if (!order) {
-    result = "invalid";
+    // A pass we signed that we cannot find is a hole in our storage, not a fake.
+    // Reporting it as NOT A PASS is how a paying guest gets turned away at the
+    // door, so say which of the two it is and let staff decide.
+    result = signed ? "no-record" : "invalid";
   } else if (order.status === "rejected") {
     result = "rejected";
   } else if (order.status !== "paid") {
@@ -1069,9 +1278,9 @@ export function scanPass(raw: string, scannedBy: string): ScanPassResult {
 
   const scan: ScanLog = {
     id: randomBytes(8).toString("base64url"),
-    orderId: order?.id,
+    orderId: order?.id ?? signed?.orderId,
     reference: order?.reference,
-    passCode: ticket?.passCode ?? order?.passCode ?? parsed.code,
+    passCode: ticket?.passCode ?? order?.passCode ?? parsed.code ?? signed?.passCode,
     ticketId: ticket?.id,
     name: order?.buyer.name,
     email: order?.buyer.email,
@@ -1265,6 +1474,33 @@ export function toStaffOrder(order: Order) {
       passCode,
       enteredAt,
     })),
-    hasPaymentProof: Boolean(order.paymentProofData),
+    hasPaymentProof: Boolean(order.paymentProofData || order.hasPaymentProof),
   };
+}
+
+export async function loadPaymentProof(
+  id: string,
+): Promise<{ src: string; name?: string } | null> {
+  const order = getOrderById(id);
+  if (!order) return null;
+  if (order.paymentProofData) {
+    return { src: order.paymentProofData, name: order.paymentProofName };
+  }
+  if (!order.hasPaymentProof) return null;
+  const auth = upstashAuth();
+  if (!auth) return null;
+  try {
+    const response = await fetch(`${auth.url}/get/${encodeURIComponent(proofKey(id))}`, {
+      headers: { Authorization: `Bearer ${auth.token}` },
+      cache: "no-store",
+    });
+    const payload = await upstashJson(response, "Upstash proof GET");
+    if (typeof payload.result === "string" && payload.result) {
+      order.paymentProofData = payload.result;
+      return { src: payload.result, name: order.paymentProofName };
+    }
+  } catch (error) {
+    console.error("[utopia] proof fetch failed", error);
+  }
+  return null;
 }

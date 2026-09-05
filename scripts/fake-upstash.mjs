@@ -44,6 +44,9 @@ createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/") {
     const [command, key, value] = JSON.parse(await body(req));
     if (command !== "SET") return json(res, 400, { error: `unsupported: ${command}` });
+    if (typeof value === "string" && Buffer.byteLength(value) > 1_000_000) {
+      return json(res, 400, { error: "ERR max request size exceeded" });
+    }
     store.set(key, value);
     return json(res, 200, { result: "OK" });
   }

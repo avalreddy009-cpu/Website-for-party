@@ -67,6 +67,9 @@ export default function AdminDashboard() {
       }
       setOrders(data.orders);
       setStats(data.stats);
+      if (data.store && !(data.store.durable && data.store.hydrateOk && data.store.writeOk)) {
+        setError(data.store.detail);
+      }
     } catch {
       setError("No connection. Try refreshing.");
     } finally {

@@ -1,6 +1,7 @@
 import { AdminShell } from "@/components/admin/AdminShell";
 import { CmsUnlock } from "@/components/admin/CmsUnlock";
 import { getAdminSession } from "@/server/admin-session";
+import { getStoreHealth, hydrateStore } from "@/server/store";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -16,5 +17,10 @@ export default async function AdminLayout({
   const session = await getAdminSession();
   if (!session) return <CmsUnlock />;
 
-  return <AdminShell username={session.username}>{children}</AdminShell>;
+  await hydrateStore();
+  return (
+    <AdminShell username={session.username} store={getStoreHealth()}>
+      {children}
+    </AdminShell>
+  );
 }

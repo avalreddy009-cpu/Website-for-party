@@ -4,7 +4,7 @@ import { fieldErrors, scanPayloadSchema } from "@/lib/validation";
 import { getDoorSession } from "@/server/admin-session";
 import { sendEntryNotice } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { flushStore, hydrateStore, listScans, scanPass } from "@/server/store";
+import { flushStoreForHttp, getStoreHealth, hydrateStore, listScans, scanPass } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -45,11 +45,12 @@ export async function POST(request: Request) {
     }
   }
 
-  await flushStore();
+  await flushStoreForHttp();
   return NextResponse.json({
     ok: result === "admitted" || result === "already-in",
     result,
     scan,
+    store: getStoreHealth(),
     pass: order
       ? {
           name: order.buyer.name,
@@ -73,5 +74,5 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Unlock the door panel first." }, { status: 401 });
   }
-  return NextResponse.json({ scans: listScans(80) });
+  return NextResponse.json({ scans: listScans(80), store: getStoreHealth() });
 }

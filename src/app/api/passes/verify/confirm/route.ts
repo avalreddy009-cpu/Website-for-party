@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { confirmCodeSchema, fieldErrors } from "@/lib/validation";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { checkCode, flushStore, hydrateStore } from "@/server/store";
+import { checkCode, flushStoreForHttp, hydrateStore } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -40,6 +40,7 @@ export async function POST(request: Request) {
     );
   }
 
-  await flushStore();
+  const saved = await flushStoreForHttp();
+  if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 503 });
   return NextResponse.json({ ok: true, verificationToken: result.token });
 }

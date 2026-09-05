@@ -15,11 +15,12 @@ import {
 
 import { BackgroundFX } from "@/components/BackgroundFX";
 import { PhraseUnlock } from "@/components/PhraseUnlock";
+import { StoreHealthBanner } from "@/components/staff/StoreHealthBanner";
 import { decodeQrFromVideo } from "@/lib/decode-qr-frame";
 import { EVENT } from "@/lib/event";
 import { looksLikeManualPass, looksLikePassQr } from "@/lib/pass-scan";
 import { getPassById } from "@/lib/passes";
-import type { ScanLog, ScanResult } from "@/server/store";
+import type { ScanLog, ScanResult, StoreHealth } from "@/server/store";
 
 const RESULT_COPY: Record<ScanResult, { label: string; tone: string; detail: string }> = {
   admitted: {
@@ -47,6 +48,12 @@ const RESULT_COPY: Record<ScanResult, { label: string; tone: string; detail: str
     tone: "#ff3b3b",
     detail: "Couldn't match that QR or code to a paid pass.",
   },
+  "no-record": {
+    label: "REAL PASS · NO RECORD",
+    tone: "#7d8bff",
+    detail:
+      "This QR is signed by us, so the pass was paid for and approved — but the order is missing from the database, so we can't tell you who it is or whether they've already been in. Check the name on their MY PASSES screen against their ID, let them in if it matches, and tell whoever is running the CMS.",
+  },
 };
 
 type ScanResponse = {
@@ -62,6 +69,7 @@ type ScanResponse = {
     unused?: number;
   } | null;
   scan: ScanLog;
+  store?: StoreHealth;
   error?: string;
 };
 
@@ -72,6 +80,7 @@ export default function DoorPage() {
   const [error, setError] = useState<string | null>(null);
   const [latest, setLatest] = useState<ScanResponse | null>(null);
   const [logs, setLogs] = useState<ScanLog[]>([]);
+  const [store, setStore] = useState<StoreHealth | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -88,7 +97,10 @@ export default function DoorPage() {
     try {
       const response = await fetch("/api/door/scan");
       const data = await response.json();
-      if (response.ok) setLogs(data.scans ?? []);
+      if (response.ok) {
+        setLogs(data.scans ?? []);
+        if (data.store) setStore(data.store);
+      }
     } catch {
       // Door still works without the sidebar.
     }
@@ -97,7 +109,10 @@ export default function DoorPage() {
   useEffect(() => {
     fetch("/api/door/session")
       .then((response) => response.json())
-      .then((data: { authenticated: boolean }) => setAuthed(Boolean(data.authenticated)))
+      .then((data: { authenticated: boolean; store?: StoreHealth }) => {
+        setAuthed(Boolean(data.authenticated));
+        if (data.store) setStore(data.store);
+      })
       .catch(() => setAuthed(false));
   }, []);
 
@@ -134,6 +149,7 @@ export default function DoorPage() {
           return;
         }
         setLatest(data);
+        if (data.store) setStore(data.store);
         setManual("");
         void loadLogs();
       } catch {
@@ -256,6 +272,7 @@ export default function DoorPage() {
     setAuthed(false);
     setLatest(null);
     setLogs([]);
+    setStore(null);
   };
 
   return (
@@ -285,6 +302,7 @@ export default function DoorPage() {
 
         {authed && (
           <div className="flex flex-1 flex-col gap-8">
+            <StoreHealthBanner store={store} boxed />
             <header className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-mono text-[9px] tracking-[0.32em] text-electric-200/70 uppercase">
@@ -411,6 +429,15 @@ export default function DoorPage() {
                               : ""}
                           </p>
                         </>
+                      ) : latest.result === "no-record" ? (
+                        <>
+                          <p className="font-display mt-2 text-2xl text-bone">
+                            Door code {latest.scan.passCode ?? "—"}
+                          </p>
+                          <p className="mt-1 font-mono text-[10px] tracking-[0.16em] text-bone/45 uppercase">
+                            SIGNATURE CHECKS OUT · ORDER NOT FOUND
+                          </p>
+                        </>
                       ) : (
                         <p className="mt-2 flex items-center gap-2 text-bone">
                           <ShieldAlert className="size-4" />
@@ -445,9 +472,12 @@ export default function DoorPage() {
                       className="glass flex items-start justify-between gap-3 rounded-2xl px-4 py-3"
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-sm text-bone">{log.name ?? "Unknown"}</p>
+                        <p className="truncate text-sm text-bone">
+                          {log.name ??
+                            (log.result === "no-record" ? "Signed pass · missing order" : "Unknown")}
+                        </p>
                         <p className="font-mono text-[10px] tracking-[0.12em] text-bone/40">
-                          {log.passCode ?? "—"} · {log.reference ?? "no ref"}
+                          {log.passCode ?? "—"} · {log.reference ?? (log.result === "no-record" ? "not in store" : "no ref")}
                         </p>
                       </div>
                       <span
@@ -459,7 +489,7 @@ export default function DoorPage() {
                         ) : log.result === "invalid" ? (
                           <X className="inline size-3" />
                         ) : null}{" "}
-                        {log.result}
+                        {log.result === "no-record" ? "NO RECORD" : log.result}
                       </span>
                     </div>
                   ))}

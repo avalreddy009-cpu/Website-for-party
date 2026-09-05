@@ -4,7 +4,7 @@ import { fieldErrors, passPricesSchema } from "@/lib/validation";
 import { getAdminSession } from "@/server/admin-session";
 import { clientKey, rateLimit } from "@/server/rate-limit";
 import {
-  flushStore,
+  flushStoreForHttp,
   getPassPrices,
   hydrateStore,
   repriceOpenReservations,
@@ -64,6 +64,9 @@ export async function POST(request: Request) {
 
   setPassPrices(parsed.data);
   const updatedHolds = repriceOpenReservations();
-  await flushStore();
+  const saved = await flushStoreForHttp();
+  if (!saved.ok) {
+    return NextResponse.json({ error: saved.error }, { status: 503, headers: NO_STORE });
+  }
   return NextResponse.json({ ok: true, ...(await pricesWithUpi(updatedHolds)) }, { headers: NO_STORE });
 }

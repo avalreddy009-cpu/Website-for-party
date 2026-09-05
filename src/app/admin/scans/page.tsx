@@ -11,6 +11,7 @@ const TONE: Record<ScanResult, string> = {
   unpaid: "#fb923c",
   rejected: "#ff3b3b",
   invalid: "#ff3b3b",
+  "no-record": "#7d8bff",
 };
 
 export default function ScanLogsPage() {
@@ -90,9 +91,12 @@ export default function ScanLogsPage() {
         {scans?.map((scan) => (
           <div key={scan.id} className="glass flex flex-wrap items-start justify-between gap-3 rounded-2xl px-5 py-4">
             <div className="min-w-0">
-              <p className="text-sm text-bone">{scan.name ?? "Unknown payload"}</p>
+              <p className="text-sm text-bone">
+                {scan.name ??
+                  (scan.result === "no-record" ? "Signed pass · order missing" : "Unknown payload")}
+              </p>
               <p className="mt-1 font-mono text-[10px] tracking-[0.12em] text-bone/40">
-                {scan.passCode ?? "—"} · {scan.reference ?? "no match"} · {scan.email ?? ""}
+                {scan.passCode ?? "—"} · {scan.reference ?? (scan.result === "no-record" ? "lost from store" : "no match")} · {scan.email ?? ""}
               </p>
               <p className="mt-1 truncate font-mono text-[9px] text-bone/25">{scan.payload}</p>
             </div>
@@ -101,7 +105,7 @@ export default function ScanLogsPage() {
                 className="font-mono text-[9px] font-bold tracking-[0.2em] uppercase"
                 style={{ color: TONE[scan.result] }}
               >
-                {scan.result}
+                {scan.result === "no-record" ? "NO RECORD" : scan.result}
               </p>
               <p className="mt-1 font-mono text-[9px] text-bone/35">
                 {new Date(scan.at).toLocaleString("en-IN", { hour12: true })}

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { emailLoginSchema, fieldErrors } from "@/lib/validation";
 import { isDevMailer, sendLoginCode } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { flushStore, hydrateStore, issueCode } from "@/server/store";
+import { flushStoreForHttp, hydrateStore, issueCode } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -55,7 +55,8 @@ export async function POST(request: Request) {
     );
   }
 
-  await flushStore();
+  const saved = await flushStoreForHttp();
+  if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 503 });
   return NextResponse.json({
     ok: true,
     expiresAt: issued.expiresAt,

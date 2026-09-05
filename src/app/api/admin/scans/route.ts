@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getAdminSession } from "@/server/admin-session";
-import { hydrateStore, listScans } from "@/server/store";
+import { getStoreHealth, hydrateStore, listScans } from "@/server/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,5 +13,5 @@ export async function GET() {
     return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   }
 
-  return NextResponse.json({ scans: listScans(300) });
+  return NextResponse.json({ scans: listScans(300), store: getStoreHealth() });
 }

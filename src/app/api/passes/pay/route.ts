@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { fieldErrors, payProofSchema } from "@/lib/validation";
 import { clientKey, rateLimit } from "@/server/rate-limit";
 import { upsertPassWallet } from "@/server/pass-wallet";
-import { attachPaymentProof, flushStore, hydrateStore, verifyToken } from "@/server/store";
+import { attachPaymentProof, flushStoreForHttp, hydrateStore, verifyToken } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -60,7 +60,8 @@ export async function POST(request: Request) {
   }
 
   await upsertPassWallet(email, result.order);
-  await flushStore();
+  const saved = await flushStoreForHttp();
+  if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 503 });
 
   return NextResponse.json({
     ok: true,

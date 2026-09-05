@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { orderIdSchema } from "@/lib/validation";
 import { getAdminSession } from "@/server/admin-session";
-import { getOrderById, hydrateStore } from "@/server/store";
+import { getOrderById, hydrateStore, loadPaymentProof } from "@/server/store";
 
 export const runtime = "nodejs";
 
@@ -23,12 +23,13 @@ export async function GET(
   }
 
   const order = getOrderById(parsed.data);
-  if (!order?.paymentProofData) {
+  const proof = await loadPaymentProof(parsed.data);
+  if (!order || !proof) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
   return NextResponse.json({
-    src: order.paymentProofData,
-    name: order.paymentProofName,
+    src: proof.src,
+    name: proof.name ?? order.paymentProofName,
   });
 }

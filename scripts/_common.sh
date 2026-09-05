@@ -9,6 +9,10 @@ REDIS="${REDIS:-http://127.0.0.1:8099}"
 CMS_PHRASE="${CMS_PHRASE:-abandon ability able about above absent absorb abstract absurd abuse access accident}"
 DOOR_PHRASE="${DOOR_PHRASE:-account accuse achieve acid acoustic acquire across act action actor actress actual}"
 
+# Must match what scripts/dev-fixtures.sh pins, or every signature we mint here
+# is rejected and the door quietly falls back to matching the six-digit code.
+AUTH_SECRET="${AUTH_SECRET:-utopia-check-fixture-secret}"
+
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
 post() { curl -s -X POST "$BASE$1" -H 'content-type: application/json' -d "$2" "${@:3}"; }
@@ -60,6 +64,18 @@ process.stdin.on("data",d=>s+=d).on("end",()=>{
 # A 600-byte JPEG that passes the magic-byte check in src/server/jpeg.ts.
 fake_jpeg() {
   node -e 'const b=Buffer.concat([Buffer.from([0xff,0xd8,0xff,0xe0]),Buffer.alloc(600,0x20),Buffer.from([0xff,0xd9])]);console.log("data:image/jpeg;base64,"+b.toString("base64"))'
+}
+
+# pass_token <orderId> <passCode> — the bare token compactPassToken() mints.
+# Scanning this on its own exercises signature verification, where the full
+# UTP|code|token payload would also match on the code and hide a bad signature.
+pass_token() {
+  node -e '
+const { createHmac } = require("crypto");
+const [orderId, code, secret] = process.argv.slice(1);
+const sig = createHmac("sha256", secret).update(`pass-qr:${orderId}:${code}`).digest("base64url").slice(0, 22);
+console.log(`${orderId}.${code}.${sig}`);
+' "$1" "$2" "$AUTH_SECRET"
 }
 
 # verified_token <email> <reserve-json-fields> — verify an address and return

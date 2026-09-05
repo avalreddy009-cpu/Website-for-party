@@ -4,7 +4,7 @@ import { fieldErrors, phoneSchema } from "@/lib/validation";
 import { getBuyerSession } from "@/server/admin-session";
 import { upsertPassWallet } from "@/server/pass-wallet";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { flushStore, hydrateStore, recoverPaidPass } from "@/server/store";
+import { flushStoreForHttp, hydrateStore, recoverPaidPass } from "@/server/store";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -72,6 +72,7 @@ export async function POST(request: Request) {
   }
 
   await upsertPassWallet(session.email, result.order);
-  await flushStore();
+  const saved = await flushStoreForHttp();
+  if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 503 });
   return NextResponse.json({ ok: true, reference: result.order.reference });
 }

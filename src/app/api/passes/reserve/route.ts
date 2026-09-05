@@ -10,7 +10,7 @@ import { upsertPassWallet } from "@/server/pass-wallet";
 import {
   canReserveWithToken,
   createOrder,
-  flushStore,
+  flushStoreForHttp,
   getPassPrice,
   hydrateStore,
   markEmailReserved,
@@ -95,7 +95,8 @@ export async function POST(request: Request) {
 
   await upsertPassWallet(email, order);
   markEmailReserved(email);
-  await flushStore();
+  const saved = await flushStoreForHttp();
+  if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 503 });
 
   return NextResponse.json({
     ok: true,

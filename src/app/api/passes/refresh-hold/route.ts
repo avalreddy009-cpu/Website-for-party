@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { fieldErrors, refreshHoldSchema } from "@/lib/validation";
 import { clientKey, rateLimit } from "@/server/rate-limit";
 import {
-  flushStore,
+  flushStoreForHttp,
   getOrderByReference,
   hydrateStore,
   repriceReservation,
@@ -71,7 +71,10 @@ export async function POST(request: Request) {
 
   const repriced = repriceReservation(order);
   const payment = await renderUpiPayment(order.total, `UTOPIA ${order.reference}`);
-  if (repriced) await flushStore();
+  if (repriced) {
+    const saved = await flushStoreForHttp();
+    if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 503 });
+  }
 
   return NextResponse.json({
     ok: true,

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { summarizeOrders } from "@/lib/order-stats";
 import { getAdminSession } from "@/server/admin-session";
 import { clientKey, rateLimit } from "@/server/rate-limit";
-import { hydrateStore, listOrders, toStaffOrder } from "@/server/store";
+import { getStoreHealth, hydrateStore, listOrders, toStaffOrder } from "@/server/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,5 +24,6 @@ export async function GET(request: Request) {
   return NextResponse.json({
     orders: orders.map(toStaffOrder),
     stats: summarizeOrders(orders),
+    store: getStoreHealth(),
   });
 }

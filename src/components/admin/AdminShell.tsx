@@ -2,15 +2,18 @@ import type { ReactNode } from "react";
 import { IndianRupee, ScanLine, ShieldCheck, Ticket } from "lucide-react";
 
 import { BackgroundFX } from "@/components/BackgroundFX";
+import { StoreHealthBanner } from "@/components/staff/StoreHealthBanner";
 import { EVENT } from "@/lib/event";
+import type { StoreHealth } from "@/server/store";
 import { LogoutButton } from "./LogoutButton";
 
 type AdminShellProps = {
   username: string;
+  store: StoreHealth;
   children: ReactNode;
 };
 
-export function AdminShell({ username, children }: AdminShellProps) {
+export function AdminShell({ username, store, children }: AdminShellProps) {
   return (
     <>
       <BackgroundFX />
@@ -66,6 +69,8 @@ export function AdminShell({ username, children }: AdminShellProps) {
             </div>
           </div>
         </header>
+
+        <StoreHealthBanner store={store} />
 
         <main className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 py-10 sm:px-8">
           {children}
