@@ -708,7 +708,6 @@ async function persistRemote(): Promise<void> {
       // Proofs first so a CMS on another instance can still open the screenshot
       // even if the metadata SET below is the one that fails.
       await persistDirtyProofs(auth);
-      await persistProofDeletes(auth);
 
       // The SET below replaces the entire database, so anything another instance
       // wrote since our last read would simply cease to exist — including a whole
@@ -740,6 +739,13 @@ async function persistRemote(): Promise<void> {
       await upstashCommand(auth, ["SET", UPSTASH_KEY, blob]);
       if (db.purgedOrders.length > 0) {
         await upstashCommand(auth, ["SET", PURGED_KEY, JSON.stringify(db.purgedOrders)]);
+      }
+      try {
+        await persistProofDeletes(auth);
+      } catch (error) {
+        // The pass is already off the blob. A leftover screenshot key cannot
+        // be opened once the order is gone.
+        console.error("[utopia] proof delete failed", error);
       }
       markRemoteWriteOk();
       return;
