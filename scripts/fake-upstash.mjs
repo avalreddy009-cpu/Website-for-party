@@ -3,7 +3,8 @@
  * the multi-instance merge can be exercised locally. Test-only.
  *
  *   GET  /get/<key>   -> { result: string | null }
- *   POST /            -> ["SET", key, value] | ["DEL", key] | ["GET", key]
+ *   POST /            -> ["SET", key, value] | ["SET", key, value, "EX", seconds]
+ *                      | ["DEL", key] | ["GET", key]
  *
  * Plus two hooks the test driver uses to play the part of a second instance:
  *

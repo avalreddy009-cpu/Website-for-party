@@ -21,9 +21,12 @@ getPhraseHashes();
  * Vercel instance has its own memory, CMS approvals never reach the door, and
  * a paid pass scans as NOT A PASS.
  *
- * Payment screenshots are stored on their own Redis keys. They used to ride
+ * Payment screenshots are stored on their own Redis keys, expire after 30
+ * days, and are deleted once staff approve or reject. They used to ride
  * inside the one database blob, which is how a couple of 400KB JPEGs silently
  * exceeded Upstash's 1MB value limit and the next SET dropped every order.
+ * Keeping them off the blob and short-lived is what makes the free 256 MB
+ * Redis plan enough.
  *
  * Staff removing a pass writes a tombstone to `utopia:purged:v1`. mergeRemote
  * only unions orders, so without that key a lambda that still had the row
@@ -345,6 +348,8 @@ export async function flushStoreForHttp(): Promise<{ ok: true } | { ok: false; e
 const UPSTASH_KEY = "utopia:db:v1";
 const PROOF_PREFIX = "utopia:proof:v1:";
 const PURGED_KEY = "utopia:purged:v1";
+/** Screenshots are the only fat Redis keys. Drop them after a month so the free 256 MB plan holds. */
+const PROOF_TTL_SECONDS = 30 * 24 * 60 * 60;
 const globalHydrate = globalThis as typeof globalThis & {
   __utopiaHydrate?: Promise<void>;
 };
@@ -463,6 +468,8 @@ const STATUS_RANK: Record<OrderStatus, number> = {
   expired: 1,
 };
 
+const DECIDED_STATUSES: OrderStatus[] = ["paid", "rejected", "cancelled"];
+
 function earliest(a?: number, b?: number): number | undefined {
   if (typeof a !== "number") return b;
   if (typeof b !== "number") return a;
@@ -527,7 +534,13 @@ function latchOrder(base: Order, other: Order): Order {
 
   // A buyer uploading proof and staff deciding on it can land on different
   // instances. Losing the screenshot means asking them to upload it again.
-  if (!merged.paymentProofData && other.paymentProofData) {
+  // Once staff have decided, the JPEG is dropped on purpose so free Redis
+  // stays small — don't copy it back from a stale instance.
+  if (
+    !DECIDED_STATUSES.includes(merged.status) &&
+    !merged.paymentProofData &&
+    other.paymentProofData
+  ) {
     merged.paymentProofData = other.paymentProofData;
     merged.paymentProofName = other.paymentProofName;
     merged.paymentProofMime = other.paymentProofMime;
@@ -671,7 +684,14 @@ async function persistDirtyProofs(auth: { url: string; token: string }): Promise
       dirtyProofs.delete(id);
       continue;
     }
-    await upstashCommand(auth, ["SET", proofKey(id), order.paymentProofData]);
+    await upstashCommand(auth, [
+      "SET",
+      proofKey(id),
+      order.paymentProofData,
+      "EX",
+      PROOF_TTL_SECONDS,
+    ]);
+    delete order.paymentProofData;
     dirtyProofs.delete(id);
   }
 }
@@ -686,6 +706,12 @@ async function persistProofDeletes(auth: { url: string; token: string }): Promis
     await upstashCommand(auth, ["DEL", proofKey(id)]);
     dirtyProofDeletes.delete(id);
   }
+}
+
+function dropLocalProof(order: Order): void {
+  delete order.paymentProofData;
+  dirtyProofs.delete(order.id);
+  dirtyProofDeletes.add(order.id);
 }
 
 function markRemoteWriteOk(): void {
@@ -1223,8 +1249,6 @@ export type DecisionResult =
   | { ok: true; order: Order }
   | { ok: false; reason: "not-found" | "already-decided" };
 
-const DECIDED_STATUSES: OrderStatus[] = ["paid", "rejected", "cancelled"];
-
 function usedPassCodes(): Set<string> {
   const used = new Set<string>();
   for (const order of Object.values(db.orders)) {
@@ -1292,6 +1316,7 @@ export function approveOrder(id: string, decidedBy?: string): DecisionResult {
   order.paidAt = Date.now();
   order.decidedBy = decidedBy;
   mintPass(order);
+  dropLocalProof(order);
   touch(order);
   persist();
   return { ok: true, order };
@@ -1309,6 +1334,7 @@ export function rejectOrder(id: string, reason?: string, decidedBy?: string): De
   order.rejectedAt = Date.now();
   order.rejectionReason = reason;
   order.decidedBy = decidedBy;
+  dropLocalProof(order);
   touch(order);
   persist();
   return { ok: true, order };

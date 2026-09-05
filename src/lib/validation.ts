@@ -113,7 +113,7 @@ export const payProofSchema = z.object({
   proofData: z
     .string()
     .regex(/^data:image\/jpeg;base64,/, "Upload a screenshot of the payment")
-    .max(400_000, "That screenshot is too large. Crop it and try again."),
+    .max(80_000, "That screenshot is too large. Crop it and try again."),
 });
 
 export const scanPayloadSchema = z.object({

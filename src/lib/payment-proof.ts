@@ -1,5 +1,6 @@
 export const UTR_DIGITS = 12;
-export const MAX_PROOF_DATA_CHARS = 380_000;
+/** Keep UPI screenshots small so the free 256 MB Redis plan lasts. */
+export const MAX_PROOF_DATA_CHARS = 80_000;
 
 export function normalizeUtr(value: string): string {
   return value.replace(/\D/g, "").slice(0, UTR_DIGITS);
@@ -24,7 +25,7 @@ export async function compressPaymentScreenshot(file: File): Promise<PaymentScre
   }
 
   const bitmap = await createImageBitmap(file);
-  const maxEdge = 960;
+  const maxEdge = 720;
   const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
   const width = Math.max(1, Math.round(bitmap.width * scale));
   const height = Math.max(1, Math.round(bitmap.height * scale));
@@ -41,7 +42,7 @@ export async function compressPaymentScreenshot(file: File): Promise<PaymentScre
   bitmap.close();
 
   const name = file.name.slice(0, 180) || "upi-screenshot.jpg";
-  for (const quality of [0.72, 0.55, 0.4]) {
+  for (const quality of [0.52, 0.4, 0.28]) {
     const dataUrl = canvas.toDataURL("image/jpeg", quality);
     if (dataUrl.length <= MAX_PROOF_DATA_CHARS) {
       return { name, mime: "image/jpeg", dataUrl };

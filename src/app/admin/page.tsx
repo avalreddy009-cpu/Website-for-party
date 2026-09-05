@@ -343,7 +343,8 @@ export default function AdminDashboard() {
                 : undefined
             }
             onViewProof={
-              order.hasPaymentProof || order.paymentProofData
+              order.status === "reserved" &&
+              (order.hasPaymentProof || order.paymentProofData)
                 ? () => void loadProof(order.id)
                 : undefined
             }
@@ -582,7 +583,8 @@ function OrderRow({
             )}
           </div>
 
-          {(order.hasPaymentProof || order.paymentProofData) && onViewProof && (
+          {(order.status === "reserved" && (order.hasPaymentProof || order.paymentProofData)) &&
+            onViewProof && (
             <button
               type="button"
               onClick={onViewProof}
