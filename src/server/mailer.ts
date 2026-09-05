@@ -259,7 +259,7 @@ export async function sendOrderConfirmation(order: Order): Promise<SendResult> {
        ${row("Status", "Waiting for UPI · we'll confirm")}
      </table>
      <p style="margin:22px 0 0;font-size:13px;line-height:1.7;color:#8c8fa8">
-       Put ${order.reference} in the UPI note if the app asks. Don't screenshot a random QR from Instagram — only the one in checkout.
+       The checkout QR already carries ${order.reference} as the UPI note. If the app asks anyway, type that same reference. Don't screenshot a random QR from Instagram — only the one in checkout.
      </p>`,
   );
   const text = `${firstName}, ${label} reserved. Reference ${order.reference}. Total ${formatPrice(order.total)}. Pay via UPI from checkout — we email each pass QR after we confirm the credit.`;

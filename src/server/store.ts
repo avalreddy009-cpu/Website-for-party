@@ -1123,6 +1123,22 @@ export function rejectOrder(id: string, reason?: string, decidedBy?: string): De
   return { ok: true, order };
 }
 
+/**
+ * Throw away an unpaid hold nobody sent money for. Paid orders, and holds
+ * that already have a UTR/screenshot, stay — those need a real reject.
+ */
+export function discardOpenHold(id: string): DecisionResult {
+  const order = getOrderById(id);
+  if (!order) return { ok: false, reason: "not-found" };
+  if (order.status !== "reserved" && order.status !== "expired") {
+    return { ok: false, reason: "already-decided" };
+  }
+  if (awaitingDecision(order)) return { ok: false, reason: "already-decided" };
+  delete db.orders[id];
+  persist();
+  return { ok: true, order };
+}
+
 export type TransferResult =
   | { ok: true; order: Order; previousBuyer: Order["buyer"] }
   | { ok: false; reason: "not-found" | "not-paid" | "already-entered" | "unchanged" };

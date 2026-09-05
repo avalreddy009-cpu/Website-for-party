@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     EVENT.holdMinutes,
   );
 
-  const payment = await renderUpiPayment(order.total, `UTOPIA ${order.reference}`);
+  const payment = await renderUpiPayment(order.total, order.reference);
 
   try {
     await sendOrderConfirmation(order);

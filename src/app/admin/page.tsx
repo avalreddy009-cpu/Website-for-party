@@ -147,6 +147,24 @@ export default function AdminDashboard() {
     }
   };
 
+  const dropHold = async (id: string) => {
+    setBusyId(id);
+    try {
+      const response = await fetch(`/api/admin/orders/${id}/discard`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "Couldn't drop that hold.");
+        return;
+      }
+      setOrders((prev) => (prev ? prev.filter((order) => order.id !== id) : prev));
+      void load();
+    } catch {
+      setError("No connection. Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const loadProof = async (id: string) => {
     try {
       const response = await fetch(`/api/admin/orders/${id}/proof`);
@@ -285,6 +303,15 @@ export default function AdminDashboard() {
             }}
             onCancelTransfer={() => setTransferringId(null)}
             onConfirmTransfer={() => void movePass(order.id)}
+            onDropHold={
+              order.status === "reserved" &&
+              !order.paidSubmittedAt &&
+              !order.hasPaymentProof &&
+              !order.paymentProofData &&
+              !order.utr
+                ? () => void dropHold(order.id)
+                : undefined
+            }
             onViewProof={
               order.hasPaymentProof || order.paymentProofData
                 ? () => void loadProof(order.id)
@@ -397,6 +424,7 @@ type OrderRowProps = {
   onStartTransfer: () => void;
   onCancelTransfer: () => void;
   onConfirmTransfer: () => void;
+  onDropHold?: () => void;
   onViewProof?: () => void;
 };
 
@@ -418,6 +446,7 @@ function OrderRow({
   onStartTransfer,
   onCancelTransfer,
   onConfirmTransfer,
+  onDropHold,
   onViewProof,
 }: OrderRowProps) {
   const pass = getPassById(order.passId);
@@ -545,6 +574,17 @@ function OrderRow({
 
           {isPending && !rejecting && (
             <div className="flex items-center gap-2">
+              {onDropHold && (
+                <button
+                  type="button"
+                  onClick={onDropHold}
+                  disabled={busy}
+                  className="flex items-center gap-1.5 rounded-full border border-white/12 px-3.5 py-2 font-mono text-[9px] tracking-[0.18em] text-bone/55 uppercase transition-all duration-300 hover:border-signal/50 hover:text-signal-soft disabled:opacity-40"
+                >
+                  <X className="size-3" />
+                  DROP HOLD
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onStartReject}

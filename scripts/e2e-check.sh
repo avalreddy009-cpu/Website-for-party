@@ -27,6 +27,9 @@ REF=$(echo "$RES" | pick reference)
 TOTAL=$(echo "$RES" | pick total)
 echo "   ref=$REF total=$TOTAL"
 echo "   upi=$(echo "$RES" | pick upiUri)"
+NOTE=$(echo "$RES" | pick upiUri | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(new URL(s.trim()).searchParams.get("tn")||"")}catch{console.log("")}})')
+echo "   tn=$NOTE"
+[ "$NOTE" = "$REF" ] || fail "UPI note should be the booking reference $REF, got $NOTE"
 [ "$TOTAL" = "4047" ] || fail "expected 2x1249 + 1549 = 4047, got $TOTAL"
 
 echo "== raise prices in the cms"
@@ -42,6 +45,8 @@ REFRESHED=$(post /api/passes/refresh-hold "{\"email\":\"$EMAIL\",\"reference\":\
 NEW_TOTAL=$(echo "$REFRESHED" | pick total)
 echo "   total=$NEW_TOTAL"
 echo "   upi=$(echo "$REFRESHED" | pick upiUri)"
+REFRESH_NOTE=$(echo "$REFRESHED" | pick upiUri | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(new URL(s.trim()).searchParams.get("tn")||"")}catch{console.log("")}})')
+[ "$REFRESH_NOTE" = "$REF" ] || fail "reissued UPI note should stay $REF, got $REFRESH_NOTE"
 [ "$NEW_TOTAL" = "5000" ] || fail "expected 2x1500 + 2000 = 5000 after reprice, got $NEW_TOTAL"
 
 echo "== once a UTR is in, the amount stops moving"

@@ -20,8 +20,8 @@ const NO_STORE = { "Cache-Control": "private, no-store, max-age=0, must-revalida
 async function pricesWithUpi(updatedHolds = 0) {
   const prices = getPassPrices();
   const [early, vip] = await Promise.all([
-    renderUpiPayment(prices.early, "UTOPIA STANDARD"),
-    renderUpiPayment(prices.vip, "UTOPIA VIP"),
+    renderUpiPayment(prices.early, ""),
+    renderUpiPayment(prices.vip, ""),
   ]);
   return { ...prices, updatedHolds, upi: { early, vip } };
 }

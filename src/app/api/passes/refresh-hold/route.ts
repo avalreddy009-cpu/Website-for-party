@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   }
 
   const repriced = repriceReservation(order);
-  const payment = await renderUpiPayment(order.total, `UTOPIA ${order.reference}`);
+  const payment = await renderUpiPayment(order.total, order.reference);
   if (repriced) {
     const saved = await flushStoreForHttp();
     if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 503 });

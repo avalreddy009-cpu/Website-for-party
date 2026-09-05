@@ -1369,7 +1369,7 @@ function StepPay({
   const fileRef = useRef<HTMLInputElement>(null);
   const vpa = reservation.vpa ?? "";
   const payeeName = reservation.payeeName ?? "AVION Productions";
-  const note = `UTOPIA ${reservation.reference}`;
+  const note = reservation.reference;
   const genericPayHref = reservation.upiUri ?? null;
 
   const copyVpa = async () => {

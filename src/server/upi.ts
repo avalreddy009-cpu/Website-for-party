@@ -35,7 +35,8 @@ export function buildUpiUri(amount: number, note: string): string | null {
     pn: payeeName,
     am: amount.toFixed(2),
     cu: "INR",
-    tn: note.slice(0, 50),
   });
+  const payNote = note.trim().slice(0, 50);
+  if (payNote) params.set("tn", payNote);
   return `upi://pay?${params.toString()}`;
 }
