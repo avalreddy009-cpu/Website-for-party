@@ -5,6 +5,7 @@ import { ArrowUpRight, Mail, MapPin } from "lucide-react";
 
 import { EVENT } from "@/lib/event";
 import { Reveal } from "./ui/Reveal";
+import { UtopiaWordmark } from "./UtopiaWordmark";
 import { InstagramGlyph } from "./ui/SocialIcons";
 
 const SOCIALS = [
@@ -91,20 +92,18 @@ export function Footer() {
         </div>
 
         <Reveal className="mt-16" distance={30}>
-          <div className="relative select-none">
-            <motion.h2
-              className="font-display text-stroke text-center text-[22vw] leading-[0.85] font-light tracking-[0.01em] uppercase lg:text-[16rem]"
-              animate={reduced ? {} : { opacity: [0.5, 0.95, 0.5] }}
+          <div className="relative mx-auto w-full max-w-5xl select-none px-4">
+            <h2 className="sr-only">{EVENT.name}</h2>
+            <motion.div
+              animate={reduced ? {} : { opacity: [0.55, 1, 0.55] }}
               transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
             >
-              {EVENT.name}
-            </motion.h2>
-            <span
-              aria-hidden
-              className="font-display pointer-events-none absolute inset-0 text-center text-[22vw] leading-[0.85] font-light tracking-[0.01em] text-electric-500/10 uppercase blur-[6px] lg:text-[16rem]"
-            >
-              {EVENT.name}
-            </span>
+              <UtopiaWordmark
+                alt=""
+                sizes="90vw"
+                className="h-auto w-full opacity-90"
+              />
+            </motion.div>
           </div>
         </Reveal>
 

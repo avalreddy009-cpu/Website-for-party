@@ -12,7 +12,7 @@ import { ArrowDown, MapPin, Ticket } from "lucide-react";
 
 import { EVENT } from "@/lib/event";
 import { NeonButton } from "./ui/NeonButton";
-import { SplitText } from "./ui/Reveal";
+import { UtopiaWordmark } from "./UtopiaWordmark";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -74,23 +74,29 @@ export function Hero({ ready }: HeroProps) {
             </span>
           </motion.div>
 
-          <h1 className="mt-8">
+          <h1 className="mt-8 w-full max-w-[19.5rem] sm:max-w-[28rem] lg:max-w-[36rem]">
             <span className="sr-only">
               {EVENT.name} by {EVENT.host} — {EVENT.tagline}
             </span>
-            <span className="font-display glow-text block text-[clamp(3.5rem,16vw,7rem)] leading-[0.86] font-light tracking-[-0.015em] whitespace-nowrap text-bone uppercase lg:text-[clamp(5rem,9vw,8.25rem)]">
-              {ready ? (
-                <SplitText
-                  text={EVENT.name}
-                  animateOnMount
-                  delay={0.2}
-                  stagger={0.075}
-                  lineClassName="pb-[0.06em]"
+            {ready ? (
+              <motion.div
+                initial={{ opacity: 0, y: 18, filter: "blur(10px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                transition={{ duration: 0.95, delay: 0.2, ease: EASE }}
+              >
+                <UtopiaWordmark
+                  alt=""
+                  priority
+                  sizes="(max-width: 640px) 80vw, (max-width: 1024px) 28rem, 36rem"
+                  className="glow-wordmark h-auto w-full select-none"
                 />
-              ) : (
-                <span className="opacity-0">{EVENT.name}</span>
-              )}
-            </span>
+              </motion.div>
+            ) : (
+              <span
+                aria-hidden
+                className="block aspect-[872/285] w-full opacity-0"
+              />
+            )}
           </h1>
 
           <motion.p

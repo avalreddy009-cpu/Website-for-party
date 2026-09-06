@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { ShaderAnimation } from "@/components/ui/shader-animation";
+import { UtopiaWordmark } from "@/components/UtopiaWordmark";
 import { EVENT } from "@/lib/event";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const EXTRUDE = 22;
-const TITLE_CLASS =
-  "font-display text-[clamp(4.2rem,18vw,11.5rem)] leading-none font-medium tracking-[-0.055em] whitespace-nowrap";
+const EXTRUDE = 10;
+const WORDMARK_CLASS = "h-auto w-[min(88vw,42rem)] max-w-full select-none";
 /** Long enough to read UTOPIA, short enough not to drag. Total ~4.5s. */
 const HOLD_MS = 3700;
 const FADE_MS = 800;
@@ -129,22 +129,16 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
             <span
               key={i}
               aria-hidden={!face}
-              className={`${TITLE_CLASS} absolute top-1/2 left-1/2`}
+              className={`${WORDMARK_CLASS} absolute top-1/2 left-1/2`}
               style={{
-                transform: `translate(-50%, -50%) translateZ(${-i * 2.6}px)`,
-                color: face
-                  ? "#2a2c3a"
-                  : t < 0.22
-                    ? `rgba(58, 62, 92, ${0.9 - t * 0.2})`
-                    : t < 0.5
-                      ? `rgba(32, 34, 58, ${0.85 - t * 0.2})`
-                      : `rgba(14, 15, 28, ${0.95 - t * 0.15})`,
-                textShadow: face
-                  ? "0 1px 0 rgba(244,244,248,0.22), 0 0 18px rgba(125,139,255,0.22), 0 0 40px rgba(3,3,7,0.45)"
-                  : "none",
+                transform: `translate(-50%, -50%) translateZ(${-i * 3.2}px)`,
+                opacity: face ? 1 : Math.max(0.12, 0.85 - t * 0.85),
+                filter: face
+                  ? "drop-shadow(0 1px 0 rgba(244,244,248,0.22)) drop-shadow(0 0 18px rgba(125,139,255,0.28))"
+                  : `brightness(${0.55 - t * 0.35})`,
               }}
             >
-              {EVENT.name}
+              <UtopiaWordmark alt="" sizes="88vw" className="h-auto w-full" />
             </span>
           );
         })}
@@ -152,22 +146,24 @@ function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
         {/* Faint floor reflection to sell the object sitting in space. */}
         <span
           aria-hidden
-          className={`${TITLE_CLASS} absolute top-1/2 left-1/2`}
+          className={`${WORDMARK_CLASS} absolute top-1/2 left-1/2`}
           style={{
             transform:
-              "translate(-50%, -50%) translateZ(-2px) translateY(96%) scaleY(-0.9)",
-            color: "rgba(42, 44, 58, 0.38)",
+              "translate(-50%, -50%) translateZ(-2px) translateY(92%) scaleY(-0.88)",
+            opacity: 0.32,
             maskImage:
               "linear-gradient(to bottom, transparent 18%, rgba(0,0,0,0.85) 100%)",
             WebkitMaskImage:
               "linear-gradient(to bottom, transparent 18%, rgba(0,0,0,0.85) 100%)",
-            filter: "blur(2px)",
+            filter: "blur(2px) brightness(0.5)",
           }}
         >
-          {EVENT.name}
+          <UtopiaWordmark alt="" className="h-auto w-full" />
         </span>
 
-        <span className={`${TITLE_CLASS} invisible`}>{EVENT.name}</span>
+        <span className={`${WORDMARK_CLASS} invisible`}>
+          <UtopiaWordmark alt="" className="h-auto w-full" />
+        </span>
       </motion.div>
     </div>
   );

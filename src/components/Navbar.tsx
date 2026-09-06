@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { LayoutDashboard, LogIn, Menu, Star, X } from "lucide-react";
+import { LayoutDashboard, LogIn, Menu, X } from "lucide-react";
 
 import { EVENT } from "@/lib/event";
 import { toRoman } from "@/lib/roman";
+import { UtopiaWordmark } from "./UtopiaWordmark";
 
 const LINKS = [
   { label: "ABOUT", href: "/#story" },
@@ -35,13 +36,14 @@ export function Navbar() {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/8 bg-[#030307]/70 backdrop-blur-xl">
       <nav className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link href="/#top" className="group flex items-baseline gap-2 leading-none">
-          <Star
-            className="size-3 text-electric-300 transition-colors group-hover:text-bone"
-            strokeWidth={1.6}
+        <Link href="/#top" className="group flex items-center gap-2.5 leading-none">
+          <UtopiaWordmark
+            alt={EVENT.name}
+            sizes="96px"
+            className="h-5 w-auto max-w-[5.6rem] object-contain object-left sm:h-6 sm:max-w-[6.8rem]"
           />
-          <span className="font-mono text-[11px] tracking-[0.24em] text-bone uppercase transition-colors group-hover:text-electric-200">
-            {EVENT.name} · {toRoman(new Date().getFullYear() + (new Date().getMonth() >= 8 ? 0 : 1))}
+          <span className="font-mono text-[10px] tracking-[0.22em] text-bone/45 uppercase transition-colors group-hover:text-electric-200">
+            {toRoman(new Date().getFullYear() + (new Date().getMonth() >= 8 ? 0 : 1))}
           </span>
           <span className="hidden font-mono text-[9px] tracking-[0.24em] text-bone/35 uppercase sm:inline">
             / {EVENT.host}
