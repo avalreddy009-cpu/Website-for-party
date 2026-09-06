@@ -28,8 +28,6 @@ export const EVENT = {
 
   email: "avionproductions27@gmail.com",
   instagram: "https://www.instagram.com/avion.prod._/",
-
-  holdMinutes: 30,
 } as const;
 
 /**

@@ -497,8 +497,6 @@ function OrderRow({
     Boolean(order.enteredAt) || Boolean(order.tickets?.some((ticket) => ticket.enteredAt));
   const tone = STATUS_TONE[order.status];
   const isPending = order.status === "reserved";
-  const holdExpired =
-    isPending && !order.paidSubmittedAt && now > 0 && now > order.holdExpiresAt;
 
   return (
     <motion.div
@@ -525,11 +523,6 @@ function OrderRow({
             >
               {STATUS_LABEL[order.status]}
             </span>
-            {holdExpired && (
-              <span className="rounded-full border border-signal/40 bg-signal/10 px-2.5 py-1 font-mono text-[8px] font-bold tracking-[0.18em] text-signal-soft uppercase">
-                HOLD EXPIRED
-              </span>
-            )}
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-bone/70">
@@ -557,9 +550,6 @@ function OrderRow({
               CREATED {formatRelative(order.createdAt, now)}
             </span>
             {isPending && order.paidSubmittedAt && <span>PROOF IN</span>}
-            {isPending && !order.paidSubmittedAt && (
-              <span>HOLD {formatRelative(order.holdExpiresAt, now)}</span>
-            )}
             {order.status === "paid" && order.decidedBy && (
               <span>APPROVED BY {order.decidedBy}</span>
             )}

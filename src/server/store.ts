@@ -789,7 +789,7 @@ async function pullRemote(): Promise<void> {
 export async function hydrateStore(): Promise<void> {
   await pullRemote();
   applyPurges();
-  if (expireStaleHolds() > 0) persist();
+  if (reopenTimedOutHolds() > 0) persist();
   // An approval that got a 503 left the paid order in this instance's memory.
   // The next staff or door request pushes it again instead of waiting for
   // someone to click Approve on an order that is already paid.
@@ -832,24 +832,20 @@ function awaitingDecision(order: Order): boolean {
 }
 
 /**
- * Close out holds nobody paid for. `OrderStatus` has carried "expired" from the
- * start and the CMS draws the badge off `holdExpiresAt`, but nothing ever set
- * the status — so the backend went on counting a month-old abandoned hold as
- * pending, and repricing it on every price change.
- *
- * Proof arriving un-expires it; see `attachPaymentProof`. Someone actually
- * sending money outranks a thirty-minute timer.
+ * Holds do not time out. Older deploys flipped unpaid reserved rows to
+ * "expired" after 30 minutes; open those back up so staff still see them
+ * as pending. DROP HOLD is how an unpaid row leaves the list.
  */
-function expireStaleHolds(now = Date.now()): number {
-  let expired = 0;
+function reopenTimedOutHolds(): number {
+  let revived = 0;
   for (const order of Object.values(db.orders)) {
-    if (order.status !== "reserved" || awaitingDecision(order)) continue;
-    if (now <= order.holdExpiresAt) continue;
-    order.status = "expired";
+    if (order.status !== "expired") continue;
+    order.status = "reserved";
+    order.holdExpiresAt = Date.now() + 180 * 24 * 60 * 60 * 1000;
     touch(order);
-    expired += 1;
+    revived += 1;
   }
-  return expired;
+  return revived;
 }
 
 /**
@@ -1115,7 +1111,6 @@ function reference(): string {
 
 export function createOrder(
   input: Omit<Order, "id" | "reference" | "status" | "createdAt" | "holdExpiresAt">,
-  holdMinutes: number,
 ): Order {
   const now = Date.now();
   const order: Order = {
@@ -1125,7 +1120,7 @@ export function createOrder(
     status: "reserved",
     createdAt: now,
     updatedAt: now,
-    holdExpiresAt: now + holdMinutes * 60 * 1000,
+    holdExpiresAt: now + 180 * 24 * 60 * 60 * 1000,
   };
   db.orders[order.id] = order;
   persist();
@@ -1218,7 +1213,6 @@ export function attachPaymentProof(
   order.hasPaymentProof = true;
   dirtyProofs.add(order.id);
   touch(order);
-  // Proof is in — don't expire the reservation after the old 30-minute hold.
   order.holdExpiresAt = Date.now() + 180 * 24 * 60 * 60 * 1000;
   persist();
   return { ok: true, order };

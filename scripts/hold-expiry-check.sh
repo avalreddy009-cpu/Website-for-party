@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# Proves an abandoned hold closes itself out, and that paying late reopens it.
-#
-# OrderStatus has always carried "expired" and the CMS draws its badge off
-# holdExpiresAt, but nothing ever set the status — so the backend kept counting
-# month-old abandoned holds as pending and repricing them on every price change.
+# Holds do not time out. An unpaid reservation stays pending until staff
+# DROP HOLD, reject, or approve. Older deploys flipped the status after
+# 30 minutes; hydrate must open those back up.
 #
 # Backdating goes through the Redis blob rather than .data/utopia.json, because
 # the next hydrate merges the remote copy straight back over the local file.
@@ -27,7 +25,7 @@ BEFORE=$(order_field "$CMS_JAR" "$REF" status)
 echo "   $REF is $BEFORE"
 [ "$BEFORE" = "reserved" ] || fail "expected reserved, got $BEFORE"
 
-echo "== backdate its window past the hold"
+echo "== backdate its window past the old 30-minute hold"
 curl -s "$REDIS/__dump" | node -e '
 let s="";
 process.stdin.on("data",d=>s+=d).on("end",()=>{
@@ -37,30 +35,27 @@ process.stdin.on("data",d=>s+=d).on("end",()=>{
   const order = Object.values(db.orders).find(o => o.reference === process.argv[1]);
   if (!order) { console.error("order is not in the blob yet"); process.exit(1) }
   order.holdExpiresAt = Date.now() - 60_000;
+  order.status = "expired";
   require("fs").writeFileSync("/tmp/backdated-db.json", JSON.stringify(db));
 })' "$REF"
 curl -s -X POST "$REDIS/__set" -H 'content-type: text/plain' --data-binary @/tmp/backdated-db.json >/dev/null
 
-echo "== the next request sweeps it"
+echo "== the next request reopens it instead of leaving it expired"
 curl -s "$BASE/api/passes/prices" >/dev/null
 AFTER=$(order_field "$CMS_JAR" "$REF" status)
 echo "   $REF is now $AFTER"
-[ "$AFTER" = "expired" ] || fail "stale hold should be expired, got $AFTER"
+[ "$AFTER" = "reserved" ] || fail "timed-out hold should stay pending, got $AFTER"
 
-echo "== refresh-hold says so instead of pretending it is live"
-echo "   $(post /api/passes/refresh-hold "{\"email\":\"$EMAIL\",\"reference\":\"$REF\",\"verificationToken\":\"$TOKEN\"}" | pick error)"
+echo "== refresh-hold still issues a QR"
+REFRESH=$(post /api/passes/refresh-hold "{\"email\":\"$EMAIL\",\"reference\":\"$REF\",\"verificationToken\":\"$TOKEN\"}")
+echo "   $(echo "$REFRESH" | pick error || true)"
+echo "$REFRESH" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("ok") is True, d'
 
-echo "== paying late puts it back in front of staff"
+echo "== paying still puts it in front of staff"
 post /api/passes/pay "{\"email\":\"$EMAIL\",\"reference\":\"$REF\",\"verificationToken\":\"$TOKEN\",\"utr\":\"419283749102\",\"proofName\":\"p.jpg\",\"proofMime\":\"image/jpeg\",\"proofData\":\"$(fake_jpeg)\"}" >/dev/null
-REVIVED=$(order_field "$CMS_JAR" "$REF" status)
-echo "   $REF is $REVIVED"
-[ "$REVIVED" = "reserved" ] || fail "late payment should reopen the hold, got $REVIVED"
-
-echo "== and it stays put through another sweep"
-curl -s "$BASE/api/passes/prices" >/dev/null
-STILL=$(order_field "$CMS_JAR" "$REF" status)
-echo "   $REF is $STILL"
-[ "$STILL" = "reserved" ] || fail "revived hold was expired again, got $STILL"
+PAID=$(order_field "$CMS_JAR" "$REF" status)
+echo "   $REF is $PAID"
+[ "$PAID" = "reserved" ] || fail "payment should keep the hold pending, got $PAID"
 
 echo
 echo "HOLD EXPIRY CHECKS PASSED"

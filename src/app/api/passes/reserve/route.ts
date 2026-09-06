@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { cartFromUnknown } from "@/lib/cart";
-import { EVENT } from "@/lib/event";
 import { priceCart } from "@/lib/pricing";
 import { fieldErrors, reserveSchema } from "@/lib/validation";
 import { sendOrderConfirmation } from "@/server/mailer";
@@ -71,19 +70,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const order = createOrder(
-    {
-      passId: totals.passId,
-      quantity: totals.quantity,
-      unitPrice: totals.unitPrice,
-      subtotal: totals.subtotal,
-      fee: totals.fee,
-      total: totals.total,
-      buyer: { name, email, phone },
-      lines: totals.lines,
-    },
-    EVENT.holdMinutes,
-  );
+  const order = createOrder({
+    passId: totals.passId,
+    quantity: totals.quantity,
+    unitPrice: totals.unitPrice,
+    subtotal: totals.subtotal,
+    fee: totals.fee,
+    total: totals.total,
+    buyer: { name, email, phone },
+    lines: totals.lines,
+  });
 
   const payment = await renderUpiPayment(order.total, order.reference);
 
