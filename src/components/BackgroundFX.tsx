@@ -9,8 +9,6 @@ import {
   useTransform,
 } from "framer-motion";
 
-import { useLowPowerGpu } from "@/lib/gpu";
-
 /**
  * Room tone for the whole page: near-black, two slow periwinkle glows that
  * drift with the cursor, projector scanlines and film grain on top. Deliberately
@@ -18,7 +16,6 @@ import { useLowPowerGpu } from "@/lib/gpu";
  */
 export function BackgroundFX() {
   const reduced = useReducedMotion();
-  const lite = useLowPowerGpu() || Boolean(reduced);
 
   const pointerX = useMotionValue(0);
   const pointerY = useMotionValue(0);
@@ -31,25 +28,14 @@ export function BackgroundFX() {
   const glowTwoY = useTransform(smoothY, [-1, 1], [26, -26]);
 
   useEffect(() => {
-    if (reduced || lite) return;
+    if (reduced) return;
     const onMove = (event: PointerEvent) => {
       pointerX.set((event.clientX / window.innerWidth) * 2 - 1);
       pointerY.set((event.clientY / window.innerHeight) * 2 - 1);
     };
     window.addEventListener("pointermove", onMove, { passive: true });
     return () => window.removeEventListener("pointermove", onMove);
-  }, [pointerX, pointerY, reduced, lite]);
-
-  if (lite) {
-    return (
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute inset-0 bg-[#030307]" />
-        <div className="absolute top-[-18%] left-[-22%] h-[70vw] w-[70vw] rounded-full bg-[radial-gradient(circle,rgba(96,105,240,0.2),transparent_64%)]" />
-        <div className="absolute right-[-24%] bottom-[8%] h-[58vw] w-[58vw] rounded-full bg-[radial-gradient(circle,rgba(125,139,255,0.12),transparent_66%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(110%_110%_at_50%_45%,transparent_28%,rgba(2,2,6,0.9)_94%)]" />
-      </div>
-    );
-  }
+  }, [pointerX, pointerY, reduced]);
 
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">

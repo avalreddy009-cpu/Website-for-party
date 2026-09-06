@@ -1,18 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import dynamic from "next/dynamic";
 import { motion, useReducedMotion } from "framer-motion";
 
+import { ShaderAnimation } from "@/components/ui/shader-animation";
 import { UtopiaWordmark } from "@/components/UtopiaWordmark";
 import { EVENT } from "@/lib/event";
-import { INTRO_FALLBACK_BG, useLowPowerGpu } from "@/lib/gpu";
-
-const ShaderAnimation = dynamic(
-  () =>
-    import("@/components/ui/shader-animation").then((mod) => mod.ShaderAnimation),
-  { ssr: false },
-);
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const EXTRUDE = 10;
@@ -27,7 +20,6 @@ type PreloaderProps = {
 
 export function Preloader({ onComplete }: PreloaderProps) {
   const reduced = useReducedMotion();
-  const lite = useLowPowerGpu() || Boolean(reduced);
   const [leaving, setLeaving] = useState(false);
   const finished = useRef(false);
 
@@ -53,22 +45,13 @@ export function Preloader({ onComplete }: PreloaderProps) {
       transition={{ duration: reduced ? 0.2 : FADE_MS / 1000, ease: EASE }}
       aria-hidden={leaving}
     >
-      {lite ? (
-        <div
-          className="absolute inset-0 h-full w-full"
-          style={{ background: INTRO_FALLBACK_BG }}
-        />
-      ) : (
-        <ShaderAnimation className="absolute inset-0 h-full w-full" />
-      )}
+      <ShaderAnimation className="absolute inset-0 h-full w-full" />
 
       {/* Deep vignette so the rings glow out of black instead of filling the frame. */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_32%,rgba(3,3,7,0.78)_94%)]" />
       {/* Projector scanlines + grain, same room tone as the rest of the site. */}
       <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(to_bottom,rgba(255,255,255,0.02)_0px,rgba(255,255,255,0.02)_1px,transparent_1px,transparent_4px)] opacity-60" />
-      {!lite && (
-        <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.13] mix-blend-soft-light" />
-      )}
+      <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.13] mix-blend-soft-light" />
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-6">
         <motion.div
@@ -84,7 +67,7 @@ export function Preloader({ onComplete }: PreloaderProps) {
           <span className="h-px w-10 bg-gradient-to-l from-transparent to-electric-300/50 sm:w-16" />
         </motion.div>
 
-        <UtopiaTitle3D leaving={leaving} lite={lite} />
+        <UtopiaTitle3D leaving={leaving} />
 
         <motion.p
           initial={{ opacity: 0 }}
@@ -108,23 +91,7 @@ export function Preloader({ onComplete }: PreloaderProps) {
   );
 }
 
-function UtopiaTitle3D({ leaving, lite }: { leaving: boolean; lite: boolean }) {
-  if (lite) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: leaving ? 0 : 1, y: 0 }}
-        transition={{ duration: leaving ? FADE_MS / 1000 : 0.7, ease: EASE }}
-      >
-        <UtopiaWordmark
-          alt=""
-          sizes="88vw"
-          className={`${WORDMARK_CLASS} drop-shadow-[0_0_18px_rgba(125,139,255,0.28)]`}
-        />
-      </motion.div>
-    );
-  }
-
+function UtopiaTitle3D({ leaving }: { leaving: boolean }) {
   return (
     <div className="[perspective:1500px]">
       <motion.div

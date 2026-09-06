@@ -62,7 +62,7 @@ export default function Home() {
         {!ready && <Preloader onComplete={handleLoaderComplete} />}
       </AnimatePresence>
 
-      {ready && <BackgroundFX />}
+      <BackgroundFX />
       <Navbar />
 
       <main className="relative flex-1">

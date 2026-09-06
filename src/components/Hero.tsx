@@ -40,18 +40,14 @@ export function Hero({ ready }: HeroProps) {
     >
       {/* Real crowd footage from the teaser, graded down to room tone. */}
       <div className="pointer-events-none absolute inset-0 z-0">
-        {ready ? (
-          <Image
-            src="/media/crowd-blue.jpg"
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-            className="film object-cover object-center opacity-80"
-          />
-        ) : (
-          <div className="absolute inset-0 bg-[#030307]" />
-        )}
+        <Image
+          src="/media/crowd-blue.jpg"
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="film object-cover object-center opacity-80"
+        />
         <div className="absolute inset-0 bg-gradient-to-b from-[#030307]/85 via-[#030307]/45 to-[#030307]" />
         <div className="absolute inset-0 bg-[radial-gradient(80%_70%_at_50%_45%,transparent,rgba(3,3,7,0.75))]" />
       </div>
@@ -186,19 +182,15 @@ export function Hero({ ready }: HeroProps) {
           >
             <div className="absolute -inset-8 rounded-full bg-[radial-gradient(circle,rgba(96,105,240,0.35),transparent_68%)] blur-3xl" />
             <div className="relative overflow-hidden rounded-2xl border border-white/12 shadow-[0_50px_120px_-40px_rgba(0,0,0,0.95)]">
-              {ready ? (
-                <Image
-                  src="/media/poster.jpg"
-                  alt={`${EVENT.name} by ${EVENT.host} — ${EVENT.dateLabel}, ${EVENT.timeLabel}`}
-                  width={1200}
-                  height={1184}
-                  priority
-                  sizes="(max-width: 1024px) 90vw, 460px"
-                  className="h-auto w-full"
-                />
-              ) : (
-                <div className="aspect-[1200/1184] w-full bg-[#030307]" />
-              )}
+              <Image
+                src="/media/poster.jpg"
+                alt={`${EVENT.name} by ${EVENT.host} — ${EVENT.dateLabel}, ${EVENT.timeLabel}`}
+                width={1200}
+                height={1184}
+                priority
+                sizes="(max-width: 1024px) 90vw, 460px"
+                className="h-auto w-full"
+              />
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(3,3,7,0.55),transparent_38%)]" />
               <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.12] mix-blend-soft-light" />
             </div>

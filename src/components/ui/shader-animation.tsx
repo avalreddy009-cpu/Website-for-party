@@ -3,8 +3,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
-import { INTRO_FALLBACK_BG, isLowPowerGpu } from "@/lib/gpu";
-
 type ShaderAnimationProps = {
   className?: string;
 };
@@ -25,11 +23,6 @@ export function ShaderAnimation({ className }: ShaderAnimationProps) {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
-    if (isLowPowerGpu()) {
-      container.style.background = INTRO_FALLBACK_BG;
-      return;
-    }
 
     const vertexShader = `
       void main() {
@@ -96,21 +89,18 @@ export function ShaderAnimation({ className }: ShaderAnimationProps) {
 
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({
-        antialias: false,
-        alpha: false,
-        powerPreference: "low-power",
-      });
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     } catch {
       // No WebGL (headless browsers, blocked GPU). Fall back to a still
       // gradient so the intro keeps its timing instead of crashing the tree.
       geometry.dispose();
       material.dispose();
-      container.style.background = INTRO_FALLBACK_BG;
+      container.style.background =
+        "radial-gradient(ellipse at center, rgba(48,58,157,0.5) 0%, rgba(23,20,64,0.55) 38%, #030307 78%)";
       return;
     }
     renderer.setClearColor(0x000000, 1);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.domElement.style.display = "block";
     renderer.domElement.style.width = "100%";
     renderer.domElement.style.height = "100%";
@@ -147,16 +137,9 @@ export function ShaderAnimation({ className }: ShaderAnimationProps) {
 
     animate();
 
-    const onLost = (event: Event) => {
-      event.preventDefault();
-      cancelAnimationFrame(animationId);
-    };
-    renderer.domElement.addEventListener("webglcontextlost", onLost);
-
     return () => {
       resizeObserver.disconnect();
       cancelAnimationFrame(animationId);
-      renderer.domElement.removeEventListener("webglcontextlost", onLost);
       if (renderer.domElement.parentNode === container) {
         container.removeChild(renderer.domElement);
       }
