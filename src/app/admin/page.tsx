@@ -533,13 +533,44 @@ function OrderRow({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: Math.min(index, 8) * 0.03, ease: EASE }}
-      className="glass relative overflow-hidden rounded-2xl p-5 sm:p-6"
+      className="glass relative rounded-2xl p-5 sm:p-6"
     >
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px"
         style={{ background: `linear-gradient(to right, transparent, ${tone}, transparent)` }}
       />
+
+      {rejecting && (
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-signal/35 bg-signal/10 p-3 sm:flex-row sm:items-center">
+          <input
+            value={reason}
+            onChange={(event) => onReasonChange(event.target.value)}
+            placeholder="Reason (optional) — shown to the buyer"
+            autoFocus
+            className="flex-1 rounded-xl border border-white/10 bg-white/2 px-3.5 py-2.5 text-sm text-bone placeholder:text-bone/30 focus:border-signal/50 focus:outline-none"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onCancelReject}
+              disabled={busy}
+              className="rounded-full border border-white/12 px-3.5 py-2 font-mono text-[9px] tracking-[0.18em] text-bone/55 uppercase transition-colors hover:text-bone disabled:opacity-40"
+            >
+              CANCEL
+            </button>
+            <button
+              type="button"
+              onClick={onConfirmReject}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-full bg-signal px-4 py-2 font-mono text-[9px] font-bold tracking-[0.18em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] disabled:scale-100 disabled:opacity-60"
+            >
+              {busy && <Loader2 className="size-3 animate-spin" />}
+              CONFIRM REJECT
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
@@ -641,7 +672,7 @@ function OrderRow({
           </div>
         </div>
 
-        <div className="flex flex-col items-start gap-3 sm:items-end">
+        <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
           <p className="font-display text-2xl font-light text-bone tabular-nums">
             {formatPrice(order.total)}
           </p>
@@ -671,7 +702,7 @@ function OrderRow({
           )}
 
           {isPending && !rejecting && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {onDropHold && (
                 <button
                   type="button"
@@ -715,47 +746,6 @@ function OrderRow({
           )}
         </div>
       </div>
-
-      <AnimatePresence>
-        {rejecting && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.35, ease: EASE }}
-            className="overflow-hidden"
-          >
-            <div className="mt-4 flex flex-col gap-3 border-t border-white/8 pt-4 sm:flex-row sm:items-center">
-              <input
-                value={reason}
-                onChange={(event) => onReasonChange(event.target.value)}
-                placeholder="Reason (optional) — shown to the buyer"
-                autoFocus
-                className="flex-1 rounded-xl border border-white/10 bg-white/2 px-3.5 py-2.5 text-sm text-bone placeholder:text-bone/30 focus:border-signal/50 focus:outline-none"
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onCancelReject}
-                  disabled={busy}
-                  className="rounded-full border border-white/12 px-3.5 py-2 font-mono text-[9px] tracking-[0.18em] text-bone/55 uppercase transition-colors hover:text-bone disabled:opacity-40"
-                >
-                  CANCEL
-                </button>
-                <button
-                  type="button"
-                  onClick={onConfirmReject}
-                  disabled={busy}
-                  className="flex items-center gap-1.5 rounded-full bg-signal px-4 py-2 font-mono text-[9px] font-bold tracking-[0.18em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] disabled:scale-100 disabled:opacity-60"
-                >
-                  {busy && <Loader2 className="size-3 animate-spin" />}
-                  CONFIRM REJECT
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {transferring && (

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
 import { fieldErrors, orderIdSchema, rejectOrderSchema } from "@/lib/validation";
 import { getAdminSession } from "@/server/admin-session";
@@ -58,13 +58,16 @@ export async function POST(
     );
   }
 
-  try {
-    await sendPassRejected(result.order, parsed.data.reason);
-  } catch (error) {
-    console.error("[utopia] rejection email failed", error);
-  }
-
   const saved = await flushStoreForHttp();
   if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 503 });
-  return NextResponse.json({ ok: true, order: toStaffOrder(result.order) });
+
+  const rejected = result.order;
+  const reason = parsed.data.reason;
+  after(() =>
+    sendPassRejected(rejected, reason).catch((error) => {
+      console.error("[utopia] rejection email failed", error);
+    }),
+  );
+
+  return NextResponse.json({ ok: true, order: toStaffOrder(rejected) });
 }

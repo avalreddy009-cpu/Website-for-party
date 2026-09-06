@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
 import { orderIdSchema } from "@/lib/validation";
 import { getAdminSession } from "@/server/admin-session";
@@ -52,13 +52,15 @@ export async function POST(
     );
   }
 
-  try {
-    await sendPassApproved(result.order);
-  } catch (error) {
-    console.error("[utopia] approval email failed", error);
-  }
-
   const saved = await flushStoreForHttp();
   if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 503 });
-  return NextResponse.json({ ok: true, order: toStaffOrder(result.order) });
+
+  const approved = result.order;
+  after(() =>
+    sendPassApproved(approved).catch((error) => {
+      console.error("[utopia] approval email failed", error);
+    }),
+  );
+
+  return NextResponse.json({ ok: true, order: toStaffOrder(approved) });
 }
