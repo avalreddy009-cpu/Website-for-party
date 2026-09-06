@@ -831,6 +831,11 @@ function awaitingDecision(order: Order): boolean {
   return Boolean(order.utr || order.paidSubmittedAt || order.paymentProofData || order.hasPaymentProof);
 }
 
+function hasPaymentEvidence(order: Order): boolean {
+  const utr = (order.utr ?? order.paymentRef ?? "").replace(/\D/g, "");
+  return utr.length === 12 && Boolean(order.hasPaymentProof || order.paymentProofData);
+}
+
 /**
  * Holds do not time out. Older deploys flipped unpaid reserved rows to
  * "expired" after 30 minutes; open those back up so staff still see them
@@ -1220,7 +1225,7 @@ export function attachPaymentProof(
 
 export type DecisionResult =
   | { ok: true; order: Order }
-  | { ok: false; reason: "not-found" | "already-decided" };
+  | { ok: false; reason: "not-found" | "already-decided" | "missing-proof" };
 
 function usedPassCodes(): Set<string> {
   const used = new Set<string>();
@@ -1283,6 +1288,9 @@ export function approveOrder(id: string, decidedBy?: string): DecisionResult {
   if (!order) return { ok: false, reason: "not-found" };
   if (DECIDED_STATUSES.includes(order.status)) {
     return { ok: false, reason: "already-decided" };
+  }
+  if (!hasPaymentEvidence(order)) {
+    return { ok: false, reason: "missing-proof" };
   }
 
   order.status = "paid";

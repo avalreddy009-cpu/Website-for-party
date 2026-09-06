@@ -7,6 +7,8 @@ import {
   ArrowRightLeft,
   Check,
   Clock3,
+  Copy,
+  ImageIcon,
   Loader2,
   Mail,
   Phone,
@@ -33,6 +35,14 @@ const TABS: { id: "all" | OrderStatus; label: string }[] = [
   { id: "rejected", label: "REJECTED" },
 ];
 
+function staffUtr(order: Order): string {
+  return (order.utr ?? "").replace(/\D/g, "");
+}
+
+function hasScreenshot(order: Order): boolean {
+  return Boolean(order.hasPaymentProof || order.paymentProofData);
+}
+
 const STATUS_TONE: Record<OrderStatus, string> = {
   reserved: "#7d8bff",
   paid: "#4ade80",
@@ -54,7 +64,7 @@ export default function AdminDashboard() {
   const [purgingId, setPurgingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [transfer, setTransfer] = useState({ name: "", email: "", phone: "" });
-  const [proof, setProof] = useState<{ src: string; name?: string } | null>(null);
+  const [proof, setProof] = useState<{ src: string; name?: string; utr?: string } | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -193,7 +203,7 @@ export default function AdminDashboard() {
         setError(data.error ?? "Couldn't open that screenshot.");
         return;
       }
-      setProof({ src: data.src, name: data.name });
+      setProof({ src: data.src, name: data.name, utr: data.utr });
     } catch {
       setError("No connection. Try again.");
     }
@@ -212,7 +222,7 @@ export default function AdminDashboard() {
             Reservations
           </h1>
           <p className="mt-2 max-w-lg text-xs leading-relaxed text-bone/45">
-            Check the UPI screenshot, then approve or reject. Approved passes can move to another name.
+            Buyers must send a 12-digit UTR and a payment screenshot. Open both here, then approve or reject.
           </p>
         </div>
 
@@ -378,6 +388,11 @@ export default function AdminDashboard() {
               >
                 <X className="size-4" />
               </button>
+              {proof.utr && (
+                <p className="mb-2 pr-12 font-mono text-[11px] tracking-[0.16em] text-void/60 uppercase">
+                  UTR {proof.utr}
+                </p>
+              )}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={proof.src}
@@ -487,6 +502,7 @@ function OrderRow({
   onDropHold,
   onViewProof,
 }: OrderRowProps) {
+  const [copiedUtr, setCopiedUtr] = useState(false);
   const pass = getPassById(order.passId);
   const label = formatCartLabel(orderLines(order));
   const codes = [
@@ -497,6 +513,20 @@ function OrderRow({
     Boolean(order.enteredAt) || Boolean(order.tickets?.some((ticket) => ticket.enteredAt));
   const tone = STATUS_TONE[order.status];
   const isPending = order.status === "reserved";
+  const utr = staffUtr(order);
+  const shot = hasScreenshot(order);
+  const canApprove = utr.length === 12 && shot;
+
+  const copyUtr = async () => {
+    if (!utr) return;
+    try {
+      await navigator.clipboard.writeText(utr);
+      setCopiedUtr(true);
+      window.setTimeout(() => setCopiedUtr(false), 1800);
+    } catch {
+      setCopiedUtr(false);
+    }
+  };
 
   return (
     <motion.div
@@ -562,8 +592,6 @@ function OrderRow({
                 {formatRelative(order.transferredAt, now)}
               </span>
             )}
-            {order.utr && <span>UTR {order.utr}</span>}
-            {order.paymentProofName && <span>PROOF {order.paymentProofName}</span>}
             {order.status === "rejected" && (
               <span>
                 REJECTED{order.decidedBy ? ` BY ${order.decidedBy}` : ""}
@@ -572,15 +600,45 @@ function OrderRow({
             )}
           </div>
 
-          {(order.hasPaymentProof || order.paymentProofData) && onViewProof && (
-            <button
-              type="button"
-              onClick={onViewProof}
-              className="mt-4 rounded-full border border-white/12 px-3.5 py-2 font-mono text-[9px] tracking-[0.18em] text-bone/55 uppercase transition-colors hover:border-electric-300/50 hover:text-electric-200"
-            >
-              VIEW UPI SCREENSHOT
-            </button>
-          )}
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/2 p-4">
+            <p className="font-mono text-[8px] tracking-[0.22em] text-bone/35 uppercase">
+              Payment proof
+            </p>
+            <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-mono text-[8px] tracking-[0.2em] text-bone/35 uppercase">UTR</p>
+                {utr ? (
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className="font-mono text-lg tracking-[0.14em] text-bone tabular-nums">
+                      {utr}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void copyUtr()}
+                      className="flex size-8 shrink-0 items-center justify-center rounded-full border border-white/12 text-bone/50 transition-colors hover:border-electric-300/50 hover:text-electric-200"
+                      aria-label="Copy UTR"
+                    >
+                      {copiedUtr ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-bone/40">Waiting for the 12-digit UTR</p>
+                )}
+              </div>
+              {shot && onViewProof ? (
+                <button
+                  type="button"
+                  onClick={onViewProof}
+                  className="flex items-center gap-2 rounded-full border border-white/12 px-3.5 py-2.5 font-mono text-[9px] tracking-[0.18em] text-bone/70 uppercase transition-colors hover:border-electric-300/50 hover:text-electric-200"
+                >
+                  <ImageIcon className="size-3.5" />
+                  VIEW SCREENSHOT
+                </button>
+              ) : (
+                <p className="text-xs text-bone/40">Waiting for screenshot</p>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-col items-start gap-3 sm:items-end">
@@ -637,7 +695,10 @@ function OrderRow({
               <button
                 type="button"
                 onClick={onApprove}
-                disabled={busy}
+                disabled={busy || !canApprove}
+                title={
+                  canApprove ? undefined : "Need the 12-digit UTR and the screenshot first"
+                }
                 className="group relative flex items-center gap-1.5 overflow-hidden rounded-full bg-bone px-4 py-2 font-mono text-[9px] font-bold tracking-[0.18em] text-void uppercase transition-transform duration-300 hover:scale-[1.03] disabled:scale-100 disabled:opacity-60"
               >
                 <span className="absolute inset-0 translate-y-full bg-gradient-to-br from-electric-500 to-emerald-400 transition-transform duration-400 group-hover:translate-y-0" />

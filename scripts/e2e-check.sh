@@ -32,6 +32,14 @@ echo "   tn=$NOTE"
 [ "$NOTE" = "$REF" ] || fail "UPI note should be the booking reference $REF, got $NOTE"
 [ "$TOTAL" = "4047" ] || fail "expected 2x1249 + 1549 = 4047, got $TOTAL"
 
+echo "== approve without UTR + screenshot is refused"
+cms_login "$CMS_JAR"
+NAKED_ID=$(order_field "$CMS_JAR" "$REF" id)
+[ -n "$NAKED_ID" ] || fail "order missing from the CMS list"
+NAKED=$(post "/api/admin/orders/$NAKED_ID/approve" '{}' -b "$CMS_JAR")
+echo "   $(echo "$NAKED" | pick error)"
+[ "$(echo "$NAKED" | pick error)" = "Need the 12-digit UTR and the UPI screenshot before you can approve." ] || fail "approve without proof should be refused"
+
 echo "== raise prices in the cms"
 PRICES=$(post /api/admin/prices '{"early":1500,"vip":2000}' -b "$CMS_JAR")
 echo "   updatedHolds=$(echo "$PRICES" | pick updatedHolds) early=$(echo "$PRICES" | pick early) vip=$(echo "$PRICES" | pick vip)"
@@ -55,6 +63,13 @@ post /api/admin/prices '{"early":9999,"vip":9999}' -b "$CMS_JAR" >/dev/null
 FROZEN=$(post /api/passes/refresh-hold "{\"email\":\"$EMAIL\",\"reference\":\"$REF\",\"verificationToken\":\"$TOKEN\"}" | pick total)
 echo "   total after proof + a price hike to 9999: $FROZEN"
 [ "$FROZEN" = "5000" ] || fail "a hold with proof on it was repriced to $FROZEN"
+
+echo "== cms list shows UTR and screenshot flag"
+UTR_SEEN=$(order_field "$CMS_JAR" "$REF" utr)
+PROOF_SEEN=$(order_field "$CMS_JAR" "$REF" hasPaymentProof)
+echo "   utr=$UTR_SEEN hasPaymentProof=$PROOF_SEEN"
+[ "$UTR_SEEN" = "419283749102" ] || fail "CMS should show the UTR, got $UTR_SEEN"
+[ "$PROOF_SEEN" = "true" ] || fail "CMS should flag the screenshot"
 
 echo "== approve, and check what the cms is handed"
 ORDER_ID=$(order_field "$CMS_JAR" "$REF" id)

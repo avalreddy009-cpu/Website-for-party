@@ -40,6 +40,12 @@ export async function POST(
     if (result.reason === "not-found") {
       return NextResponse.json({ error: "That order doesn't exist." }, { status: 404 });
     }
+    if (result.reason === "missing-proof") {
+      return NextResponse.json(
+        { error: "Need the 12-digit UTR and the UPI screenshot before you can approve." },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: "Already decided — refresh the list." },
       { status: 409 },

@@ -31,5 +31,6 @@ export async function GET(
   return NextResponse.json({
     src: proof.src,
     name: proof.name ?? order.paymentProofName,
+    utr: order.utr ?? order.paymentRef,
   });
 }

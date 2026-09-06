@@ -1402,7 +1402,7 @@ function StepPay({
       <StepTitle
         eyebrow="STEP 05"
         title="Pay on UPI"
-        hint="Pay first. Then come back with the 12-digit UTR and a screenshot. Typing the UTR does not submit the reservation."
+        hint="Pay first. Then this screen needs both the 12-digit UTR and a screenshot of the paid screen — one without the other will not submit."
       />
 
       <div
@@ -1497,7 +1497,7 @@ function StepPay({
 
       <label className="mt-6 block">
         <span className="mb-2 flex items-center justify-between font-mono text-[9px] tracking-[0.28em] text-bone/40 uppercase">
-          UPI TRANSACTION / UTR (12 DIGITS)
+          UPI TRANSACTION / UTR (12 DIGITS, REQUIRED)
           {errors.utr && <span className="text-signal-soft normal-case">{errors.utr}</span>}
         </span>
         <input
@@ -1517,7 +1517,7 @@ function StepPay({
 
       <div className="mt-4">
         <span className="mb-2 flex items-center justify-between font-mono text-[9px] tracking-[0.28em] text-bone/40 uppercase">
-          PAYMENT SCREENSHOT
+          PAYMENT SCREENSHOT (REQUIRED)
           {errors.proof && <span className="text-signal-soft normal-case">{errors.proof}</span>}
         </span>
         <input
@@ -1555,7 +1555,7 @@ function StepPay({
       </div>
 
       <p className="mt-4 text-[11px] leading-relaxed text-bone/45">
-        Submit stays locked until the UTR is 12 digits and a screenshot is attached.
+        Submit stays locked until you enter the 12-digit UTR and attach a screenshot. Both are required.
         An admin still has to confirm the credit before a pass is emailed.
       </p>
     </div>
