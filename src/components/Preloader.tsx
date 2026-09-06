@@ -11,7 +11,15 @@ import { INTRO_FALLBACK_BG, useLowPowerGpu } from "@/lib/gpu";
 const ShaderAnimation = dynamic(
   () =>
     import("@/components/ui/shader-animation").then((mod) => mod.ShaderAnimation),
-  { ssr: false },
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="absolute inset-0 h-full w-full"
+        style={{ background: INTRO_FALLBACK_BG }}
+      />
+    ),
+  },
 );
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -112,12 +120,13 @@ function UtopiaTitle3D({ leaving, lite }: { leaving: boolean; lite: boolean }) {
   if (lite) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 1, y: 0 }}
         animate={{ opacity: leaving ? 0 : 1, y: 0 }}
-        transition={{ duration: leaving ? FADE_MS / 1000 : 0.7, ease: EASE }}
+        transition={{ duration: leaving ? FADE_MS / 1000 : 0.4, ease: EASE }}
       >
         <UtopiaWordmark
           alt=""
+          priority
           sizes="88vw"
           className={`${WORDMARK_CLASS} drop-shadow-[0_0_18px_rgba(125,139,255,0.28)]`}
         />
@@ -171,7 +180,7 @@ function UtopiaTitle3D({ leaving, lite }: { leaving: boolean; lite: boolean }) {
                   : `brightness(${0.55 - t * 0.35})`,
               }}
             >
-              <UtopiaWordmark alt="" sizes="88vw" className="h-auto w-full" />
+              <UtopiaWordmark alt="" priority={face} sizes="88vw" className="h-auto w-full" />
             </span>
           );
         })}
