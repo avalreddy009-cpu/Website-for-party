@@ -26,7 +26,7 @@ export const EVENT = {
   policyLong:
     "UTOPIA has a zero-substance policy: no alcohol, no vaping, and no drugs. Pocket and bag checks are performed at entry.",
 
-  email: "passes@avionproductions.in",
+  email: "avionproductions67@gmail.com",
   instagram: "https://www.instagram.com/avion.prod._/",
 
   holdMinutes: 30,

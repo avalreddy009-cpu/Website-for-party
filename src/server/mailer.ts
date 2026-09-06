@@ -40,7 +40,7 @@ function mailFrom() {
   if (process.env.MAIL_FROM?.trim()) return process.env.MAIL_FROM.trim();
   const user = gmailUser();
   if (user) return `UTOPIA <${user}>`;
-  return `UTOPIA <onboarding@resend.dev>`;
+  return `UTOPIA <${EVENT.email}>`;
 }
 
 function escapeHtml(value: string): string {
@@ -53,7 +53,11 @@ function escapeHtml(value: string): string {
 
 function mailReplyTo() {
   if (process.env.MAIL_REPLY_TO?.trim()) return process.env.MAIL_REPLY_TO.trim();
-  return gmailUser() || EVENT.email;
+  return EVENT.email;
+}
+
+function withContactLine(text: string) {
+  return `${text}\n\nQuestions: ${EVENT.email}`;
 }
 
 export const isDevMailer = () =>
@@ -184,6 +188,9 @@ const shell = (heading: string, body: string) => `
         ${EVENT.venueName}, ${EVENT.venueCity}<br />
         <a href="${EVENT.mapsUrl}" style="color:#9aa4ff">Open in Google Maps</a>
       </p>
+      <p style="margin:18px 0 0;font-size:12px;line-height:1.7;color:#8c8fa8">
+        Questions: <a href="mailto:${escapeHtml(EVENT.email)}" style="color:#9aa4ff">${escapeHtml(EVENT.email)}</a>
+      </p>
       <p style="margin:18px 0 0;font-size:11px;color:#63667e">
         ${EVENT.policyLong}
       </p>
@@ -208,7 +215,9 @@ export async function sendVerificationCode(
        Good for 10 minutes. If you didn't ask for this, someone typed your address by mistake — ignore it and nothing happens.
      </p>`,
   );
-  const text = `${firstName}, your UTOPIA verification code is ${code}. It expires in 10 minutes.`;
+  const text = withContactLine(
+    `${firstName}, your UTOPIA verification code is ${code}. It expires in 10 minutes.`,
+  );
   return send(to, `${code} is your UTOPIA code`, html, text);
 }
 
@@ -224,7 +233,9 @@ export async function sendLoginCode(to: string, code: string): Promise<SendResul
        Good for 10 minutes. If you didn't ask for this, ignore it.
      </p>`,
   );
-  const text = `Your UTOPIA login code is ${code}. It expires in 10 minutes.`;
+  const text = withContactLine(
+    `Your UTOPIA login code is ${code}. It expires in 10 minutes.`,
+  );
   return send(to, `${code} is your UTOPIA login code`, html, text);
 }
 
@@ -262,7 +273,9 @@ export async function sendOrderConfirmation(order: Order): Promise<SendResult> {
        The checkout QR already carries ${order.reference} as the UPI note. If the app asks anyway, type that same reference. Don't screenshot a random QR from Instagram — only the one in checkout.
      </p>`,
   );
-  const text = `${firstName}, ${label} reserved. Reference ${order.reference}. Total ${formatPrice(order.total)}. Pay via UPI from checkout — we email each pass QR after we confirm the credit.`;
+  const text = withContactLine(
+    `${firstName}, ${label} reserved. Reference ${order.reference}. Total ${formatPrice(order.total)}. Pay via UPI from checkout — we email each pass QR after we confirm the credit.`,
+  );
   return send(order.buyer.email, `Pay UPI: ${order.reference} — UTOPIA`, html, text);
 }
 
@@ -323,7 +336,9 @@ export async function sendPassApproved(order: Order): Promise<SendResult> {
      </p>`,
   );
   const codes = tickets.map((ticket) => ticket.passCode).join(", ");
-  const text = `${firstName}, you're confirmed. ${label}. Name: ${order.buyer.name}. Door codes: ${codes || order.passCode}. Reference ${order.reference}. Open your passes: ${siteUrl()}/account?claim=${signPassClaim(order)}`;
+  const text = withContactLine(
+    `${firstName}, you're confirmed. ${label}. Name: ${order.buyer.name}. Door codes: ${codes || order.passCode}. Reference ${order.reference}. Open your passes: ${siteUrl()}/account?claim=${signPassClaim(order)}`,
+  );
   const subject =
     tickets.length > 1
       ? `Your UTOPIA passes — ${order.reference}`
@@ -349,7 +364,9 @@ export async function sendPassTransferredAway(
        If you didn't ask for this, reply to this email right now.
      </p>`,
   );
-  const text = `${previous.name.split(" ")[0] || "there"}, your UTOPIA pass ${order.reference} was moved by AVION staff. The old QR and door code no longer work. Reply if this wasn't you.`;
+  const text = withContactLine(
+    `${previous.name.split(" ")[0] || "there"}, your UTOPIA pass ${order.reference} was moved by AVION staff. The old QR and door code no longer work. Reply if this wasn't you.`,
+  );
   return send(previous.email, `Pass moved: ${order.reference}`, html, text);
 }
 
@@ -370,7 +387,9 @@ export async function sendPassRejected(
        If you think this is a mistake, reply to this email with your UPI proof (UTR / screenshot) and we'll take another look.
      </p>`,
   );
-  const text = `${firstName}, we couldn't confirm ${order.reference}${reason ? ` (${reason})` : ""}. Reply with UPI proof if this looks wrong.`;
+  const text = withContactLine(
+    `${firstName}, we couldn't confirm ${order.reference}${reason ? ` (${reason})` : ""}. Reply with UPI proof if this looks wrong.`,
+  );
   return send(order.buyer.email, `Couldn't confirm: ${order.reference}`, html, text);
 }
 
@@ -388,6 +407,8 @@ export async function sendEntryNotice(order: Order): Promise<SendResult> {
        If this wasn't you, reply to this email right now.
      </p>`,
   );
-  const text = `${firstName}, you're in. Door scanned your UTOPIA pass (${order.reference}). See you on the floor.`;
+  const text = withContactLine(
+    `${firstName}, you're in. Door scanned your UTOPIA pass (${order.reference}). See you on the floor.`,
+  );
   return send(order.buyer.email, `You're in — welcome to UTOPIA`, html, text);
 }

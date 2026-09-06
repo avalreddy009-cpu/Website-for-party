@@ -310,6 +310,16 @@ export default function AccountPage() {
             </form>
           )}
         </div>
+
+        <p className="mt-10 text-center text-xs leading-relaxed text-bone/35">
+          Questions?{" "}
+          <a
+            href={`mailto:${EVENT.email}`}
+            className="text-bone/55 underline decoration-white/20 underline-offset-4"
+          >
+            {EVENT.email}
+          </a>
+        </p>
       </main>
     </>
   );

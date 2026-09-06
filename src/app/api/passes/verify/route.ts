@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { EVENT } from "@/lib/event";
 import { orderIntentSchema, fieldErrors } from "@/lib/validation";
 import { isDevMailer, sendVerificationCode } from "@/server/mailer";
 import { clientKey, rateLimit } from "@/server/rate-limit";
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     const message =
       issued.reason === "cooldown"
         ? `Hang on ${issued.retryAfterSeconds}s before asking for another code.`
-        : "That address has had too many codes today. Try again later or email us.";
+        : `That address has had too many codes today. Try again later or email ${EVENT.email}.`;
     return NextResponse.json(
       { error: message, retryAfterSeconds: issued.retryAfterSeconds },
       { status: 429 },

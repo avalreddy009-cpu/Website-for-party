@@ -251,7 +251,13 @@ export default function LoginPage() {
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-bone/30" />
             <p className="text-[11px] leading-relaxed text-bone/35">
               Buying a pass? Start from the homepage. This page only shows reservations already
-              tied to your inbox.
+              tied to your inbox. Questions?{" "}
+              <a
+                href={`mailto:${EVENT.email}`}
+                className="text-bone/55 underline decoration-white/20 underline-offset-4"
+              >
+                {EVENT.email}
+              </a>
             </p>
           </div>
         </motion.div>
