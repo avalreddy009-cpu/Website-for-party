@@ -43,9 +43,8 @@ export const PASSES: PassTier[] = [
     price: 1549,
     badge: "₹300 MORE. WORTH IT.",
     blurb:
-      "Everything in Standard, plus somewhere to sit, someone to bring it over, and no standing in the sun waiting to get in.",
+      "Somewhere to sit, someone to bring it over, and no standing in the sun waiting to get in.",
     perks: [
-      "Everything in the Standard pass",
       "Skip the queue — walk past everyone, don't make eye contact",
       "Private lounge with a table that is actually yours",
       "Table service, so nobody has to volunteer as drink runner",
