@@ -14,6 +14,13 @@ export type PassTier = {
   accentSoft: string;
 };
 
+const FLOOR_PERKS = [
+  "Entry from 12:00 PM, stay till they switch the lights on",
+  "Unlimited food — actual food, not two nachos and a prayer",
+  "Unlimited mocktails, refilled until you're bored of them",
+  "Live DJ, full rig, lasers doing their thing",
+];
+
 export const PASSES: PassTier[] = [
   {
     id: "early",
@@ -25,10 +32,7 @@ export const PASSES: PassTier[] = [
     blurb:
       "The whole party, none of the frills. Five hours on the floor, food and mocktails you don't have to keep paying for.",
     perks: [
-      "Entry from 12:00 PM, stay till they switch the lights on",
-      "Unlimited food — actual food, not two nachos and a prayer",
-      "Unlimited mocktails, refilled until you're bored of them",
-      "Live DJ, full rig, lasers doing their thing",
+      ...FLOOR_PERKS,
       "Free cloakroom so you're not dancing with a backpack",
     ],
     notIncluded: "No table, no queue-skip. You'll survive.",
@@ -45,6 +49,7 @@ export const PASSES: PassTier[] = [
     blurb:
       "Somewhere to sit, someone to bring it over, and no standing in the sun waiting to get in.",
     perks: [
+      ...FLOOR_PERKS,
       "Skip the queue — walk past everyone, don't make eye contact",
       "Private lounge with a table that is actually yours",
       "Table service, so nobody has to volunteer as drink runner",

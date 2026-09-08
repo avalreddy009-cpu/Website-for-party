@@ -162,11 +162,11 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
               {pass.blurb}
             </p>
 
-            <ul className="relative mt-6 space-y-2.5">
-              {pass.perks.slice(0, 4).map((perk) => (
+            <ul className="relative mt-4 space-y-1.5">
+              {pass.perks.slice(0, 6).map((perk) => (
                 <li
                   key={perk}
-                  className="flex items-start gap-2.5 text-xs leading-snug text-bone/45"
+                  className="flex items-start gap-2.5 text-[11px] leading-snug text-bone/45 sm:text-xs"
                 >
                   <span
                     className="mt-[5px] size-1 shrink-0 rounded-full"
@@ -245,7 +245,7 @@ export function PassCard({ pass, index, onBuy }: PassCardProps) {
               {pass.name}
             </h3>
 
-            <ul className="relative mt-6 flex-1 space-y-4 overflow-y-auto pr-1">
+            <ul className="relative mt-5 flex-1 space-y-2.5 overflow-y-auto pr-1">
               {pass.perks.map((perk, i) => (
                 <motion.li
                   key={perk}
