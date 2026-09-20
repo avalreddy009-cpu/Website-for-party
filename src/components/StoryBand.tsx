@@ -137,7 +137,7 @@ export function AvionBand() {
           <Reveal delay={0.18}>
             <p className="mt-5 max-w-md text-sm leading-relaxed text-bone/60 sm:text-base">
               We put on rooms, not events. Sound first, lights second, everything
-              else third. UTOPIA is our September chapter — the one we&apos;ve been
+              else third. UTOPIA is our October chapter — the one we&apos;ve been
               teasing on the grid all month.
             </p>
           </Reveal>

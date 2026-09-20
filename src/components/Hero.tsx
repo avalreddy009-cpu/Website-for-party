@@ -151,7 +151,7 @@ export function Hero({ ready }: HeroProps) {
             className="mt-12 grid w-full max-w-lg grid-cols-2 gap-x-8 gap-y-6 border-t border-white/10 pt-8 sm:grid-cols-3"
           >
             {[
-              { label: "WHEN", value: "SUN 27 SEP" },
+              { label: "WHEN", value: EVENT.compactDateLabel },
               { label: "DOORS", value: "12 — 5 PM" },
               { label: "WHERE", value: "OUZO CLUB" },
             ].map((item) => (
@@ -195,7 +195,7 @@ export function Hero({ ready }: HeroProps) {
               <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.12] mix-blend-soft-light" />
             </div>
             <p className="mt-4 text-center font-mono text-[9px] tracking-[0.28em] text-bone/30 uppercase">
-              THE POSTER · SEP 27 · HYDERABAD
+              THE POSTER · {EVENT.shortDateLabel} · HYDERABAD
             </p>
           </motion.div>
         </motion.div>

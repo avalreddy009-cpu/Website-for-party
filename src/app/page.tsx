@@ -14,11 +14,12 @@ import { Navbar } from "@/components/Navbar";
 import { PassTiers } from "@/components/PassTiers";
 import { Preloader } from "@/components/Preloader";
 import { AvionBand, StoryBand, TeaserBand } from "@/components/StoryBand";
+import { EVENT } from "@/lib/event";
 import type { PassTier } from "@/lib/passes";
 
 const TICKER = [
   "UTOPIA",
-  "SUN 27 SEP",
+  EVENT.compactDateLabel,
   "12 — 5 PM",
   "OUZO CLUB & KITCHEN",
   "HYDERABAD",

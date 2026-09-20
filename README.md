@@ -3,7 +3,7 @@
 Landing page and pass-reservation flow for **UTOPIA**, a dry day party by AVION
 Productions.
 
-> **Sunday 27 September · 12:00 PM – 5:00 PM**
+> **Sunday 4 October · 12:00 PM – 5:00 PM**
 > Ouzo Club and Kitchen, Hyderabad · [Directions](https://maps.app.goo.gl/2RwwfkFsRRg3G3rJ6)
 > Unlimited food, unlimited mocktails, zero alcohol.
 
@@ -168,7 +168,7 @@ Almost all copy lives in `src/lib/event.ts` and `src/lib/passes.ts` — names,
 prices, perks, venue, maps link, policy lines. Section prose sits inline in its
 own component so it reads in context rather than through a key.
 
-The countdown targets the **next** 27 September at noon, so it stays live year
+The countdown targets the **next** 4 October at noon, so it stays live year
 over year instead of freezing at zero.
 
 ## Media

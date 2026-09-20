@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Bodoni_Moda, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+
+import { EVENT } from "@/lib/event";
 import "./globals.css";
 
 // The AVION logotype is a high-contrast Didone, so the whole site speaks in one.
@@ -25,16 +27,16 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
   ),
-  title: "UTOPIA — by AVION Productions | Sep 27, Ouzo Club Hyderabad",
+  title: `${EVENT.name} — by ${EVENT.host} | Oct 4, Ouzo Club Hyderabad`,
   description:
-    "UTOPIA: a state of escape. The party for the right people. Sunday 27 September, 12–5 PM at Ouzo Club and Kitchen, Hyderabad. Unlimited food, unlimited mocktails, zero alcohol.",
+    "UTOPIA: a state of escape. The party for the right people. Sunday 4 October, 12–5 PM at Ouzo Club and Kitchen, Hyderabad. Unlimited food, unlimited mocktails, zero alcohol.",
   keywords: [
     "UTOPIA",
     "AVION Productions",
     "Hyderabad day party",
     "Ouzo Club and Kitchen",
     "no alcohol party",
-    "September 27",
+    "October 4",
   ],
   // No og:image / twitter card — sharing the URL should stay a plain link.
   openGraph: {

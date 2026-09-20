@@ -1651,7 +1651,7 @@ function StepDone({
               {reservation.reference}
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <StubCell label="DATE" value="SUN 27 SEP" />
+              <StubCell label="DATE" value={EVENT.compactDateLabel} />
               <StubCell label="DOORS" value="12:00 PM" />
               <StubCell label="PASS" value={cartLabel} />
               <StubCell label="TOTAL" value={formatPrice(reservation.total)} />

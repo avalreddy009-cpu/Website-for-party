@@ -7,8 +7,9 @@ export const EVENT = {
   tagline: "The party for the right people",
   subTagline: "a state of escape",
 
-  dateLabel: "SUNDAY, SEPTEMBER 27",
-  shortDateLabel: "SEP 27",
+  dateLabel: "SUNDAY, OCTOBER 4",
+  shortDateLabel: "OCT 4",
+  compactDateLabel: "SUN 4 OCT",
   dayLabel: "SUNDAY",
   timeLabel: "12:00 PM — 5:00 PM",
   doorsLabel: "Doors at 12. Come early, the good spots go first.",
@@ -31,12 +32,12 @@ export const EVENT = {
 } as const;
 
 /**
- * Always the next 27 September at noon, so the countdown never sits at zero.
+ * Always the next 4 October at noon, so the countdown never sits at zero.
  */
 export function getEventDate(from: Date = new Date()): Date {
-  const candidate = new Date(from.getFullYear(), 8, 27, 12, 0, 0, 0);
+  const candidate = new Date(from.getFullYear(), 9, 4, 12, 0, 0, 0);
   if (candidate.getTime() > from.getTime()) return candidate;
-  return new Date(from.getFullYear() + 1, 8, 27, 12, 0, 0, 0);
+  return new Date(from.getFullYear() + 1, 9, 4, 12, 0, 0, 0);
 }
 
 export const CURRENCY = "₹";

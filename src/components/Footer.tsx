@@ -29,7 +29,7 @@ export function Footer() {
               {EVENT.host}
             </p>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-bone/50">
-              UTOPIA is our September chapter — one Sunday afternoon, one room,
+              UTOPIA is our October chapter — one Sunday afternoon, one room,
               and a crowd that came to dance instead of drink. If that sounds
               like your people, you already know what to do.
             </p>

@@ -19,7 +19,7 @@ Landing + checkout + guest account + CMS + door scanner for **UTOPIA**, a dry da
 
 | | |
 | --- | --- |
-| When | Sunday 27 September, 12:00 PM – 5:00 PM |
+| When | Sunday 4 October, 12:00 PM – 5:00 PM |
 | Where | Ouzo Club and Kitchen, Hyderabad |
 | Policy | Zero substance: no alcohol, no vaping, no drugs. Pocket/bag checks. |
 | Passes | **STANDARD** (id `"early"`) and **VIP** (id `"vip"`) |
