@@ -80,5 +80,19 @@ process.stdin.on("data",d=>s+=d).on("end",()=>{
 CMS_PROOF=$(curl -s "$BASE/api/admin/orders/$ORDER_ID/proof" -b "$CMS_JAR" | pick src)
 [ "${CMS_PROOF#data:image/jpeg}" != "$CMS_PROOF" ] || fail "CMS could not open the migrated screenshot"
 
+echo "== reject must outrank a still-pending redis copy"
+REJECT_EMAIL="guard-rej-$RANDOM@example.com"
+REJECT_TOKEN=$(verified_token "$REJECT_EMAIL" '"early":1')
+REJECT_REF=$(post /api/passes/reserve "{\"name\":\"Check Runner\",\"email\":\"$REJECT_EMAIL\",\"phone\":\"9876500000\",\"early\":1,\"verificationToken\":\"$REJECT_TOKEN\"}" | pick reference)
+post /api/passes/pay "{\"email\":\"$REJECT_EMAIL\",\"reference\":\"$REJECT_REF\",\"verificationToken\":\"$REJECT_TOKEN\",\"utr\":\"419283749102\",\"proofName\":\"p.jpg\",\"proofMime\":\"image/jpeg\",\"proofData\":\"$(fake_jpeg)\"}" >/dev/null
+REJECT_ID=$(order_field "$CMS_JAR" "$REJECT_REF" id)
+post "/api/admin/orders/$REJECT_ID/reject" '{"reason":"does not match"}' -b "$CMS_JAR" >/dev/null
+# A later persist (price save) re-reads Redis, which still had reserved until
+# reject flushed. If reserved outranks rejected, CMS snaps back to pending.
+post /api/admin/prices '{"early":1249,"vip":1549}' -b "$CMS_JAR" >/dev/null
+REJECT_STATUS=$(order_field "$CMS_JAR" "$REJECT_REF" status)
+echo "   $REJECT_REF status=$REJECT_STATUS"
+[ "$REJECT_STATUS" = "rejected" ] || fail "reject did not stick (status=$REJECT_STATUS)"
+
 echo
 echo "STORE GUARD CHECKS PASSED"

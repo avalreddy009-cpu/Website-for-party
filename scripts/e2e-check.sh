@@ -128,6 +128,34 @@ echo "   reference, pass 3: $(post /api/door/scan "{\"payload\":\"$REF\"}" -b "$
 echo "   reference, none left: $(post /api/door/scan "{\"payload\":\"$REF\"}" -b "$DOOR_JAR" | pick result)"
 echo "   a forged payload: $(post /api/door/scan '{"payload":"UTP|000000|nope.000000.aaaaaaaaaaaaaaaaaaaaaa"}' -b "$DOOR_JAR" | pick result)"
 
+echo "== reject stays rejected after redis merge"
+REJECT_EMAIL="e2e-rej-$RANDOM@example.com"
+REJECT_TOKEN=$(verified_token "$REJECT_EMAIL" '"early":1')
+REJECT_REF=$(post /api/passes/reserve "{\"name\":\"Check Runner\",\"email\":\"$REJECT_EMAIL\",\"phone\":\"9876500000\",\"early\":1,\"verificationToken\":\"$REJECT_TOKEN\"}" | pick reference)
+post /api/passes/pay "{\"email\":\"$REJECT_EMAIL\",\"reference\":\"$REJECT_REF\",\"verificationToken\":\"$REJECT_TOKEN\",\"utr\":\"419283749102\",\"proofName\":\"p.jpg\",\"proofMime\":\"image/jpeg\",\"proofData\":\"$(fake_jpeg)\"}" >/dev/null
+REJECT_ID=$(order_field "$CMS_JAR" "$REJECT_REF" id)
+[ -n "$REJECT_ID" ] || fail "reject fixture missing from the CMS list"
+REJECTED=$(post "/api/admin/orders/$REJECT_ID/reject" '{"reason":"UTR does not match"}' -b "$CMS_JAR")
+echo "   api status=$(echo "$REJECTED" | pick order.status)"
+[ "$(echo "$REJECTED" | pick order.status)" = "rejected" ] || fail "reject API did not return rejected"
+# Another persist used to fold the still-reserved Redis copy over the reject.
+post /api/admin/prices '{"early":1249,"vip":1549}' -b "$CMS_JAR" >/dev/null
+RELOAD=$(order_field "$CMS_JAR" "$REJECT_REF" status)
+echo "   after another save: $RELOAD"
+[ "$RELOAD" = "rejected" ] || fail "reject was overwritten back to $RELOAD"
+curl -s "$REDIS/__dump" | node -e '
+let s="";
+process.stdin.on("data",d=>s+=d).on("end",()=>{
+  const db = JSON.parse(JSON.parse(s).value);
+  const order = Object.values(db.orders).find(o => o.reference === process.argv[1]);
+  if (!order) { console.error("rejected order missing from redis"); process.exit(1) }
+  if (order.status !== "rejected") { console.error("redis status is " + order.status); process.exit(1) }
+  console.log("   redis status=rejected");
+})' "$REJECT_REF"
+DOOR_REJ=$(post /api/door/scan "{\"payload\":\"$REJECT_REF\"}" -b "$DOOR_JAR" | pick result)
+echo "   door on a rejected reference: $DOOR_REJ"
+[ "$DOOR_REJ" = "rejected" ] || fail "door should report rejected, got $DOOR_REJ"
+
 echo "== each panel refuses the other's cookie"
 echo "   cms cookie on the door:  $(post /api/door/scan "{\"payload\":\"$FIRST\"}" -b "$CMS_JAR" | pick error)"
 echo "   door cookie on the cms:  $(curl -s "$BASE/api/admin/orders" -b "$DOOR_JAR" | pick error)"

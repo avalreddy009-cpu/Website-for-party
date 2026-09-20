@@ -463,11 +463,16 @@ function forgetOrder(order: Order): void {
   applyPurges();
 }
 
+/**
+ * Higher means the order has travelled further. `reserved` used to outrank
+ * `rejected`, so persistRemote's read-before-write folded the Redis copy
+ * (still pending) over a staff reject and CMS never showed it as error.
+ */
 const STATUS_RANK: Record<OrderStatus, number> = {
   paid: 4,
-  reserved: 3,
-  rejected: 2,
-  cancelled: 1,
+  rejected: 3,
+  cancelled: 3,
+  reserved: 2,
   expired: 1,
 };
 

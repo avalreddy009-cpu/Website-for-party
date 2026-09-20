@@ -120,6 +120,7 @@ export default function AdminDashboard() {
       setRejectingId(null);
       setReason("");
       setTransferringId(null);
+      if (action === "reject") setTab("rejected");
       // Stats aggregate across the whole list, so pull a fresh copy.
       void load();
     } catch {
