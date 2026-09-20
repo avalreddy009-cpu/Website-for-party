@@ -25,11 +25,17 @@ getPhraseHashes();
  * to ride inside the one database blob, which is how a couple of 400KB JPEGs
  * silently exceeded Upstash's 1MB value limit and the next SET dropped every
  * order. Checkout shrinks each screenshot before upload so the free 256 MB
- * plan can hold them.
+ * plan can hold them. A save that strips those JPEGs from the blob MUST copy
+ * them onto `utopia:proof:v1:{orderId}` first — otherwise CMS "VIEW SCREENSHOT"
+ * goes dead on every older booking.
  *
  * Staff removing a pass writes a tombstone to `utopia:purged:v1`. mergeRemote
  * only unions orders, so without that key a lambda that still had the row
  * would put it back on the next save.
+ *
+ * persistRemote must not SET `utopia:db:v1` unless the preceding GET succeeded.
+ * Login/checkout OTP also persist(). A cold lambda whose Redis read failed used
+ * to write its empty memory over the live order book, and CMS woke up blank.
  */
 
 export type OrderStatus = "reserved" | "paid" | "rejected" | "cancelled" | "expired";
@@ -663,7 +669,18 @@ async function fetchRemote(auth: { url: string; token: string }): Promise<void> 
   applyPurges();
 }
 
+function ordersWithInlineProof(): string[] {
+  return Object.entries(db.orders)
+    .filter(([, order]) => Boolean(order.paymentProofData))
+    .map(([id]) => id);
+}
+
 async function persistDirtyProofs(auth: { url: string; token: string }): Promise<void> {
+  // Anything still sitting on the order row has to move onto its own key
+  // before snapshotDb() strips it. dirtyProofs only tracks *this* instance's
+  // uploads; a blob hydrated from an older deploy still carries JPEGs with
+  // an empty dirty set, and the next SET used to delete them.
+  for (const id of ordersWithInlineProof()) dirtyProofs.add(id);
   const ids = [...dirtyProofs];
   for (const id of ids) {
     if (UNSAFE_KEYS.has(id)) {
@@ -728,14 +745,16 @@ async function persistRemote(): Promise<void> {
       // purged order back if another lambda still had it. Tombstones live on
       // their own Redis key so an older build that rewrites the blob cannot
       // erase the fact that staff removed the pass.
-      try {
-        await fetchRemote(auth);
-      } catch (error) {
-        // Writing on a failed read risks a clobber; not writing loses whatever we
-        // were asked to save. Losing a staff decision is worse, so we go ahead.
-        console.error("[utopia] read-before-write failed, writing anyway", error);
-      }
+      //
+      // A failed GET used to fall through and SET anyway. Login and checkout
+      // OTP persist() on a cold lambda whose read failed, so that path wrote
+      // `{ orders: {} }` over live bookings. Staff still see the decision in
+      // this instance; hydrateStore retries the flush after a later successful
+      // read instead of gambling the whole book.
+      await fetchRemote(auth);
       applyPurges();
+      // Hydrate may have just pulled in-blob proofs off an older snapshot.
+      await persistDirtyProofs(auth);
 
       const blob = JSON.stringify(snapshotDb());
       if (blob.includes("data:image/jpeg")) {
@@ -789,16 +808,24 @@ async function pullRemote(): Promise<void> {
 export async function hydrateStore(): Promise<void> {
   await pullRemote();
   applyPurges();
-  if (reopenTimedOutHolds() > 0) persist();
+  const needsFlush =
+    reopenTimedOutHolds() > 0 ||
+    ordersWithInlineProof().length > 0 ||
+    Boolean(upstashAuth() && !lastRemoteWriteOk);
+  if (!needsFlush) return;
   // An approval that got a 503 left the paid order in this instance's memory.
   // The next staff or door request pushes it again instead of waiting for
   // someone to click Approve on an order that is already paid.
-  if (upstashAuth() && !lastRemoteWriteOk && !hydrateRetryScheduled) {
+  if (!hydrateRetryScheduled) {
     hydrateRetryScheduled = true;
     persist();
-    void flushPromise.finally(() => {
+    try {
+      await flushStore();
+    } catch {
+      // Health flags are set on the failed write. The row stays in memory.
+    } finally {
       hydrateRetryScheduled = false;
-    });
+    }
   }
 }
 

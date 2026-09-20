@@ -4,7 +4,7 @@
 # NO_FAKE_REDIS is set) the local stand-in for Upstash so the multi-instance
 # merge path is live.
 #
-#   node scripts/fake-upstash.mjs &     # only needed for concurrency-check.sh
+#   node scripts/fake-upstash.mjs &     # needed for concurrency/store-guard checks
 #   ./scripts/dev-fixtures.sh
 #
 # None of these are the deployment's values. Production reads its own from the

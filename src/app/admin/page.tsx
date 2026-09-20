@@ -57,7 +57,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("reserved");
+  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [transferringId, setTransferringId] = useState<string | null>(null);
@@ -293,8 +293,18 @@ export default function AdminDashboard() {
         )}
 
         {orders && filtered.length === 0 && (
-          <div className="glass rounded-2xl px-6 py-14 text-center font-mono text-[10px] tracking-[0.2em] text-bone/35 uppercase">
-            NOTHING HERE
+          <div className="glass rounded-2xl px-6 py-14 text-center">
+            <p className="font-mono text-[10px] tracking-[0.2em] text-bone/35 uppercase">
+              {orders.length === 0 ? "No reservations in the store" : "Nothing in this tab"}
+            </p>
+            {orders.length === 0 && (
+              <p className="mx-auto mt-3 max-w-md text-[12px] leading-relaxed text-bone/40">
+                Approved and pending bookings live in Redis, not in this deploy.
+                If this used to be full, a save ran without a successful Redis read
+                and replaced the order book. Check the banner above, then Upstash
+                key utopia:db:v1.
+              </p>
+            )}
           </div>
         )}
 

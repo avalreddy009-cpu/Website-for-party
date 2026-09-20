@@ -122,5 +122,7 @@ UTOPIA logotype: `public/brand/utopia-wordmark.png`, `src/components/UtopiaWordm
 - **iOS Safari crash** on first load: WebKit killing the tab, not an in-app toast. Cause is the homepage intro (WebGL + stacked 3D wordmark + blur FX + hero photos). Rolled back on purpose. If asked to fix it again, skip WebGL on phones; do not ship that unless he wants it.
 - **README vs code:** ignore README prices/fee/mail/store. Code + this file win.
 - **Staff Redis banner** must stay off `/`.
+- **CMS data is Redis, not git.** Orders live in Upstash `utopia:db:v1`, screenshots in `utopia:proof:v1:{orderId}`. Copy/poster deploys do not touch that. A save used to SET the whole book even when the Redis GET failed — login/checkout OTP on a cold lambda could write `{ orders: {} }` over live bookings, and CMS looked empty. Saves now refuse that SET until a GET succeeds. Hydrate also copies any in-blob screenshot onto its proof key before stripping it; older rows that already lost the JPEG cannot be invented back. If CMS is still empty after this ships, restore `utopia:db:v1` from the Upstash backup, do not seed a demo user.
+- **CMS default tab is ALL.** Pending-only made approved passes look missing.
 - **Gmail:** if login/checkout says it couldn’t send email, check Vercel `GMAIL_USER` (must be the 27 inbox) and a current app password. Never paste the app password into the repo.
 - Next.js 16 may nag about `middleware` → `proxy`. Don’t drive-by migrate that unless the task is that migration.

@@ -9,12 +9,15 @@
  * Plus two hooks the test driver uses to play the part of a second instance:
  *
  *   GET  /__dump      -> the stored blob
- *   POST /__set       -> overwrite the stored blob
+ *   POST /__fail_gets -> GET /get/* returns 500 (persist must not clobber)
+ *   POST /__ok_gets   -> GET works again
  */
 import { createServer } from "node:http";
 
 const store = new Map();
 const port = Number(process.argv[2] ?? 8099);
+/** Test hook: fail every GET so persistRemote cannot read-before-write. */
+let failGets = false;
 
 const body = (req) =>
   new Promise((resolve) => {
@@ -34,17 +37,27 @@ createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/__dump") {
     return json(res, 200, { value: store.get("utopia:db:v1") ?? null });
   }
+  if (req.method === "POST" && url.pathname === "/__fail_gets") {
+    failGets = true;
+    return json(res, 200, { ok: true });
+  }
+  if (req.method === "POST" && url.pathname === "/__ok_gets") {
+    failGets = false;
+    return json(res, 200, { ok: true });
+  }
   if (req.method === "POST" && url.pathname === "/__set") {
     store.set("utopia:db:v1", await body(req));
     return json(res, 200, { ok: true });
   }
   if (req.method === "GET" && url.pathname.startsWith("/get/")) {
+    if (failGets) return json(res, 500, { error: "injected read failure" });
     const key = decodeURIComponent(url.pathname.slice("/get/".length));
     return json(res, 200, { result: store.get(key) ?? null });
   }
   if (req.method === "POST" && url.pathname === "/") {
     const [command, key, value] = JSON.parse(await body(req));
     if (command === "GET") {
+      if (failGets) return json(res, 500, { error: "injected read failure" });
       return json(res, 200, { result: store.get(key) ?? null });
     }
     if (command === "DEL") {
